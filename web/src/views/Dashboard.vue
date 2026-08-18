@@ -65,6 +65,32 @@ function fmtUptime(s) {
   return d > 0 ? `${d}天 ${h}时 ${m}分` : `${h}时 ${m}分`
 }
 
+
+// 底盘传感器键名 → 中文（SparkBaseSensor.msg 字段）
+const SENSOR_LABEL = {
+  // 红外防撞（7 个）
+  ir_bumper_left: '红外防撞·左',
+  ir_bumper_right: '红外防撞·右',
+  ir_bumper_front: '红外防撞·前',
+  ir_bumper_front_left: '红外防撞·前左',
+  ir_bumper_front_right: '红外防撞·前右',
+  ir_bumper_back_left: '红外防撞·后左',
+  ir_bumper_back_right: '红外防撞·后右',
+  // 跌落（6 个）
+  cliff_left: '悬崖·左',
+  cliff_right: '悬崖·右',
+  cliff_front_left: '悬崖·前左',
+  cliff_front_right: '悬崖·前右',
+  cliff_back_left: '悬崖·后左',
+  cliff_back_right: '悬崖·后右',
+  // 轮组
+  wheel_drop_left: '轮抬起·左',
+  wheel_drop_right: '轮抬起·右',
+  wheel_over_current_left: '轮过流·左',
+  wheel_over_current_right: '轮过流·右',
+}
+function sensorLabel(k) { return SENSOR_LABEL[k] || k }
+
 onMounted(() => {
   // 主数据轮询用轻量端点（/api/system/light，<30ms，无 ROS 图）
   // ROS 图节点/话题改在 TopologyView（仅 Logs 视图需要时拉取）
@@ -277,7 +303,7 @@ function cpuColor(p) {
             <div class="sensor-strip">
               <div v-for="(v, k) in sensors.base_sensor" :key="k"
                    class="sensor-cell" :class="{ alert: v }">
-                <div class="k">{{ k }}</div>
+                <div class="k" :title="k">{{ sensorLabel(k) }}</div>
                 <div class="v" :style="{ color: v ? 'var(--red)' : 'var(--green)' }">
                   {{ v ? '触发' : '正常' }}
                 </div>
