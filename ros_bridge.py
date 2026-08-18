@@ -9,6 +9,7 @@
 import threading
 import time
 
+import subprocess
 # ---- 防御式导入 ----
 ros_available = False
 Image = Twist = CvBridge = None
@@ -53,7 +54,9 @@ class _TwistPublisher:
         if not ros_available: return False
         if self._node is not None: return True
         try:
-            rclpy.init()
+            # rclpy.init() 整个进程只能调一次
+            if not rclpy.ok():
+                rclpy.init()
             self._node = Node("spark_console_twist_pub")
             self._pub = self._node.create_publisher(Twist, CMD_TOPIC, 10)
             self._executor = SingleThreadedExecutor()
@@ -96,7 +99,9 @@ class StreamContext:
     def start(self):
         if not ros_available: return False
         try:
-            rclpy.init()
+            # rclpy.init() 整个进程只能调一次；先尝试，已 init 就跳过
+            if not rclpy.ok():
+                rclpy.init()
             self._node = Node(f"spark_cam_{self._last_seq}_{self.topic.replace('/','_')}")
             self._sub = self._node.create_subscription(
                 Image, self.topic, self._on_image,
@@ -145,33 +150,24 @@ class StreamContext:
 
 
 def list_image_topics() -> list:
-    """列出 ROS 图中所有 sensor_msgs/Image 话题"""
+    """列出 ROS 图中所有 sensor_msgs/Image 话题。
+
+    不用 rclpy 直接调用（init/shutdown 会影响同进程其他 rclpy 节点），
+    直接 subprocess 跑 'ros2 topic list -t' 更安全。
+    """
     if not ros_available: return []
     out = []
     try:
-        # 短生命周期节点 + 单次 spin
-        rclpy.init()
-        node = Node("_spark_topic_lister_" + str(int(time.time()*1000)))
-        # spin 一次
-        topics_and_types = node.get_topic_names_and_types()
-        for name, types in topics_and_types:
-            type_names = [t.typename for t in types]
-            if any('Image' in t for t in type_names):
-                out.append({"name": name, "types": type_names})
-        node.destroy_node()
-        rclpy.shutdown()
+        r = subprocess.run(
+            ['ros2', 'topic', 'list', '-t'],
+            capture_output=True, text=True, timeout=5)
+        for line in r.stdout.splitlines():
+            if '[' in line and ']' in line and 'Image' in line:
+                name = line.split('[')[0].strip()
+                typ = line.split('[')[1].rstrip(']').strip()
+                out.append({"name": name, "types": [typ]})
     except Exception as e:
         print(f"[list_image_topics] 失败: {e}")
-        # 备用：直接 ros2 topic list
-        import subprocess
-        try:
-            r = subprocess.run(['ros2', 'topic', 'list', '-t'], capture_output=True, text=True, timeout=5)
-            for line in r.stdout.splitlines():
-                if '[' in line and ']' in line and 'Image' in line:
-                    name = line.split('[')[0].strip()
-                    typ = line.split('[')[1].rstrip(']').strip()
-                    out.append({"name": name, "types": [typ]})
-        except: pass
     return sorted(out, key=lambda x: x["name"])
 
 
