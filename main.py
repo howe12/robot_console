@@ -224,15 +224,16 @@ def api_stop_all(request: Request):
 
 @app.get("/api/status")
 def api_status():
-    frame = bridge.latest_frame()
+    # camera frame 现在由各 StreamContext 自己管理（ros_bridge.StreamContext），
+    # /api/status 不再需要走全局 bridge
     return {
         "ok": True,
         "running": manager.status(),
         "ros": {
             "available": ros_available,
-            "bridge_started": bridge.available,
-            "camera_frame": frame is not None,
-            "camera_stamp_ns": frame[1] if frame else None,
+            "bridge_started": False,  # 保留字段兼容（无意义，前端不再依赖）
+            "camera_frame": False,
+            "camera_stamp_ns": None,
         },
     }
 
