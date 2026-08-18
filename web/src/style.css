@@ -48,10 +48,19 @@
   --t-slow: 280ms cubic-bezier(.4, 0, .2, 1);
   --t-spring: 380ms cubic-bezier(.16, 1, .3, 1);
 
-  /* ── 字体 ── */
-  --font-display: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI',
-                  'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, 'Cascadia Code', Menlo, monospace;
+  /* ── 字体（Apple SF Pro 系族 + 系统回退）── */
+  /* Display: 用于标题、品牌、display-md/xl */
+  --font-display: 'SF Pro Display', 'SF Pro', -apple-system, BlinkMacSystemFont,
+                  'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  /* Text: 用于正文、UI（字怀更紧、更易读） */
+  --font-text:    'SF Pro Text', 'SF Pro', -apple-system, BlinkMacSystemFont,
+                  'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  /* Compact: 用于版本号、tag、密集合数字 */
+  --font-compact: 'SF Compact Display', 'SF Compact Text', -apple-system, BlinkMacSystemFont,
+                  'Helvetica Neue', 'PingFang SC', system-ui, sans-serif;
+  /* Mono: 等宽，用于代码、日志、终端 */
+  --font-mono:    'SF Mono', 'JetBrains Mono', 'Fira Code', ui-monospace,
+                  'Cascadia Code', Menlo, Consolas, monospace;
 
   /* ── 视差（鼠标驱动）── */
   --mx: 0;  /* -1..1 */
@@ -71,13 +80,17 @@ html, body { margin: 0; height: 100%; }
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-display);
+  /* Apple 人本主义字体：display 用于大字号, text 用于正文，跨平台回退 */
+  font-family: var(--font-text);
   font-size: 14.5px;
-  line-height: 1.55;
-  letter-spacing: -0.01em;
+  line-height: 1.5;
+  letter-spacing: -0.005em;  /* 正文微负字距 */
+  font-weight: 400;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-variant-numeric: tabular-nums;  /* 数字等宽 */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'cv11' 1, 'ss01' 1, 'kern' 1;  /* SF Pro: 圆润数字 + 优雅字怀 */
+  text-rendering: optimizeLegibility;
   overflow: hidden;
 }
 a { color: var(--accent); text-decoration: none; }
@@ -649,7 +662,7 @@ a { color: var(--accent); text-decoration: none; }
   box-shadow: 0 0 0 0 rgba(255, 92, 92, .4);
   animation: emergencyPulse 2.4s ease-in-out infinite;
 }
-.emergency-stop .stop-icon { font-size: 14px; }
+.emergency-stop .stop-icon { font-size: 14px; color: currentColor; fill: currentColor; stroke: none; }
 .emergency-stop:hover:not(:disabled) {
   background: #ff3b3b; border-color: #ff3b3b; transform: translateY(-1px);
   box-shadow: 0 6px 20px rgba(255, 92, 92, .4);
@@ -1013,3 +1026,69 @@ th {
 .task-card .head { display: flex; align-items: center; gap: 10px; }
 .task-card .head .nm { font-weight: 600; }
 .task-card .desc { color: var(--muted); font-size: 12px; margin: 6px 0 12px; }
+/* ============================================================
+ * 排版 utility（Apple 风：精确负字距曲线）
+ * ============================================================ */
+.t-display-xl { font-family: var(--font-display); font-size: 34px; line-height: 1.08; letter-spacing: -0.04em; font-weight: 700; }
+.t-display-lg { font-family: var(--font-display); font-size: 28px; line-height: 1.12; letter-spacing: -0.035em; font-weight: 700; }
+.t-display-md { font-family: var(--font-display); font-size: 22px; line-height: 1.18; letter-spacing: -0.028em; font-weight: 600; }
+.t-headline   { font-family: var(--font-text);    font-size: 17px; line-height: 1.25; letter-spacing: -0.015em; font-weight: 600; }
+.t-body       { font-family: var(--font-text);    font-size: 14.5px; line-height: 1.5; letter-spacing: -0.005em; font-weight: 400; }
+.t-callout    { font-family: var(--font-text);    font-size: 13px; line-height: 1.45; letter-spacing: 0; font-weight: 400; }
+.t-footnote   { font-family: var(--font-text);    font-size: 12px; line-height: 1.4; letter-spacing: 0; font-weight: 400; }
+.t-caption    { font-family: var(--font-text);    font-size: 11px; line-height: 1.35; letter-spacing: 0.02em; font-weight: 500; }
+.t-mono       { font-family: var(--font-mono);    font-size: 12.5px; line-height: 1.6; letter-spacing: 0; font-weight: 500; }
+.t-compact    { font-family: var(--font-compact); font-size: 11px; letter-spacing: 0.04em; font-weight: 600; }
+.t-num        { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; font-weight: 500; }
+
+/* 文本颜色 utility */
+.t-primary { color: var(--text); }
+.t-secondary { color: var(--text-2); }
+.t-tertiary { color: var(--muted); }
+.t-accent { color: var(--accent); }
+
+/* ============================================================
+ * SVG Icon 系统（SF Symbols 风格：1.5px stroke、圆角端点、24px 网格）
+ * ============================================================ */
+.icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  width: 1em; height: 1em;
+  vertical-align: -0.125em;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round; stroke-linejoin: round;
+  fill: none;
+  transition: all var(--t-fast);
+}
+.icon-sm { width: 14px; height: 14px; }
+.icon-md { width: 18px; height: 18px; }
+.icon-lg { width: 24px; height: 24px; }
+.icon-xl { width: 32px; height: 32px; }
+.icon-solid { fill: currentColor; stroke: none; }
+
+/* SVG 在按钮/标签里与文字对齐 */
+.btn .icon, .tag .icon, .fn-item .icon { margin-right: 6px; }
+
+/* ============================================================
+ * Scrollbar 进一步收紧（苹果风：overlay 滚动条）
+ * ============================================================ */
+.content-wrap, .terminal, .sidebar, .cam-hero, .foxglove-box {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg3) transparent;
+}
+
+/* ============================================================
+ * Logo（带 SF Symbols 风格的简笔机器人图标）
+ * ============================================================ */
+.logo-icon {
+  display: inline-block;
+  width: 26px; height: 26px;
+  filter: drop-shadow(0 0 12px var(--accent-glow));
+  animation: logoFloat 4s ease-in-out infinite;
+}
+.logo-icon path { fill: url(#logoGradient); stroke: none; }
+
+/* SVG 默认渐变（icon 配色） */
+.icon-grad-1 { fill: url(#gradAccent); stroke: none; }
+.icon-grad-2 { fill: url(#gradGreen); stroke: none; }

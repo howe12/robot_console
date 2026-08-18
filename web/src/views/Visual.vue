@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, inject, defineProps, defineEmits } from 'vue'
 import { api } from '../api'
+import Icon from '../components/Icon.vue'
 
 const props = defineProps({
   sidebarCollapsed: { type: Boolean, default: false }
@@ -121,7 +122,8 @@ onUnmounted(() => {
     <!-- 粘性侧边栏：设备清单 -->
     <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
       <div class="sidebar-header">
-        <span>🔌 设备清单</span>
+        <Icon name="cubeBox" size="md" />
+        <span>设备清单</span>
         <button class="sidebar-toggle" @click="emit('toggle-sidebar')">{{ sidebarCollapsed ? '›' : '‹' }}</button>
       </div>
       <div class="sidebar-content">
@@ -149,7 +151,7 @@ onUnmounted(() => {
         </div>
 
         <div style="margin-top:20px">
-          <button class="btn primary" style="width:100%" @click="startBringup">⚡ 一键启动底盘</button>
+          <button class="btn primary" style="width:100%" @click="startBringup"><Icon name="bolt" size="sm" /> 一键启动底盘</button>
         </div>
       </div>
     </aside>
@@ -160,7 +162,7 @@ onUnmounted(() => {
       <div class="hero">
         <div class="hero-grid">
           <div class="hero-title">
-            <h2><span class="hero-icon">◇</span> 可视化控制</h2>
+            <h2><Icon name="visual" size="xl" class="hero-icon" /> 可视化控制</h2>
             <span class="hero-sub">实时相机画面 · WASD 速度遥控 · Foxglove 3D 视图（端口 8765）</span>
           </div>
           <div class="hero-actions">
@@ -168,7 +170,7 @@ onUnmounted(() => {
               <span class="dot" :class="camState === '在线' ? 'ok' : (camState === '连接中…' ? 'idle' : 'bad')"></span>
               相机 {{ camState }}
             </span>
-            <button class="btn" @click="startCam">↻ 重连</button>
+            <button class="btn" @click="startCam"><Icon name="refresh" size="sm" /> 重连</button>
           </div>
         </div>
       </div>
@@ -176,7 +178,7 @@ onUnmounted(() => {
       <!-- 相机 Hero + 遥控面板 并列 -->
       <div class="grid grid-2" style="margin-top:8px">
         <div class="card glow">
-          <h3><span class="card-h3-icon">📷</span> 相机画面 · 16:10</h3>
+          <h3><Icon name="camera" size="md" class="card-h3-icon" /> 相机画面 · 16:10</h3>
           <div class="cam-hero">
             <div class="cam-film top">REC · {{ camState }}</div>
             <img v-if="camHref" :src="camHref" alt="相机画面" />
@@ -186,7 +188,7 @@ onUnmounted(() => {
         </div>
 
         <div class="card glow">
-          <h3><span class="card-h3-icon">🎮</span> 速度控制
+          <h3><Icon name="speed" size="md" class="card-h3-icon" /> 速度控制
             <span class="muted" style="font-weight:400;margin-left:8px;font-family:var(--font-mono)">{{ velState }}</span>
           </h3>
 
@@ -225,12 +227,12 @@ onUnmounted(() => {
       <!-- Foxglove 3D 视图 -->
       <div class="card glow" style="margin-top:16px">
         <div class="flex" style="margin-bottom:12px">
-          <h3 style="margin:0"><span class="card-h3-icon">🧊</span> 3D 视图（Foxglove · 端口 8765）</h3>
+          <h3 style="margin:0"><Icon name="layers" size="md" class="card-h3-icon" /> 3D 视图（Foxglove · 端口 8765）</h3>
           <div class="spacer"></div>
           <span class="warn" style="font-size:12px" v-if="!foxgloveOn && foxgloveTip">{{ foxgloveTip }}</span>
-          <button class="btn sm primary" @click="startFoxglove" v-if="!foxgloveOn" style="margin-left:8px">▶ 启动 Foxglove</button>
-          <button class="btn sm danger" @click="stopFoxglove" v-else style="margin-left:8px">■ 停止</button>
-          <a class="btn sm ghost" href="https://app.foxglove.dev/" target="_blank" rel="noopener" style="margin-left:8px">Foxglove 网页 ↗</a>
+          <button class="btn sm primary" @click="startFoxglove" v-if="!foxgloveOn" style="margin-left:8px"><Icon name="play" size="sm" /> 启动 Foxglove</button>
+          <button class="btn sm danger" @click="stopFoxglove" v-else style="margin-left:8px"><Icon name="stop" size="sm" /> 停止</button>
+          <a class="btn sm ghost" href="https://app.foxglove.dev/" target="_blank" rel="noopener" style="margin-left:8px">Foxglove 网页 <Icon name="arrowRightCircle" size="sm" /></a>
         </div>
         <div class="foxglove-box">
           <iframe
@@ -239,7 +241,7 @@ onUnmounted(() => {
               : 'about:blank'"
             title="Foxglove 3D 可视化"></iframe>
           <div v-if="!foxgloveOn" style="position:absolute;inset:0;background:var(--bg2);display:flex;flex-direction:column;gap:8px;align-items:center;justify-content:center">
-            <span style="font-size:48px;opacity:.3">🧊</span>
+            <Icon name="layers" size="xl" />
             <span style="color:var(--muted)">启动 Foxglove 桥接后此处嵌入 3D / 雷达 / TF / 地图视图</span>
           </div>
         </div>

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, reactive, inject, onMounted, computed, defineProps, defineEmits } from 'vue'
 import { api } from '../api'
+import Icon from '../components/Icon.vue'
 
 const props = defineProps({
   sidebarCollapsed: { type: Boolean, default: false }
@@ -160,7 +161,8 @@ const otherRunningId = computed(() => {
     <!-- 粘性侧边栏：机器人功能列表 -->
     <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
       <div class="sidebar-header">
-        <span>🤖 功能列表</span>
+        <Icon name="tasks" size="md" />
+        <span>功能列表</span>
         <button class="sidebar-toggle" @click="emit('toggle-sidebar')">
           {{ sidebarCollapsed ? '›' : '‹' }}
         </button>
@@ -182,7 +184,7 @@ const otherRunningId = computed(() => {
             <span class="tag">{{ t.menu ?? '—' }}</span>
             <button class="btn sm ghost" title="查看 launch 文件"
               @click.stop="openLaunchSource(t.launch_pkg || t.package, t.launch_file)"
-              v-if="t.launch_file">📄</button>
+              v-if="t.launch_file"><Icon name="file" size="sm" /></button>
           </div>
         </div>
 
@@ -197,7 +199,7 @@ const otherRunningId = computed(() => {
               <div v-for="l in p.launch" :key="l.name" class="ws-item"
                 :class="{ active: selectedWs?.launch.name === l.name && selectedWs?.package === p.package }">
                 <button class="btn sm" style="flex:1;text-align:left;font-size:11px" @click="pickWs(p.package, l)">• {{ l.name }}</button>
-                <button class="btn sm ghost" title="查看 launch 文件" @click="openLaunchSource(p.package, l.name)">📄</button>
+                <button class="btn sm ghost" title="查看 launch 文件" @click="openLaunchSource(p.package, l.name)"><Icon name="file" size="sm" /></button>
               </div>
             </div>
           </div>
@@ -211,30 +213,30 @@ const otherRunningId = computed(() => {
       <div class="hero">
         <div class="hero-grid">
           <div class="hero-title">
-            <h2><span class="hero-icon">◈</span> 机器人功能</h2>
+            <h2><Icon name="tasks" size="xl" class="hero-icon" /> 机器人功能</h2>
             <span class="hero-sub">选择功能 → 调整参数 → 启动 · 互斥保护：已有任务运行时禁止启动其他</span>
           </div>
           <div class="hero-actions">
             <span class="hero-status" v-if="msg" :style="msg.includes('失败')||msg.includes('异常') ? 'color:var(--yellow)' : ''">
               {{ msg }}
             </span>
-            <button class="btn ghost" @click="loadAll">↻ 刷新</button>
+            <button class="btn ghost" @click="loadAll"><Icon name="refresh" size="sm" /></button>
           </div>
         </div>
       </div>
 
       <!-- 主内容：选中时显示详情，否则显示 Hero + 提示 -->
       <div v-if="!selected && !selectedWs" class="empty">
-        <div style="font-size:48px;opacity:.3">◈</div>
+        <div style="font-size:48px;opacity:.3"><Icon name="tasks" size="xl" /></div>
         <div style="margin-top:12px">从左侧选择一个功能查看详情</div>
       </div>
 
       <!-- 精选任务详情 -->
       <div v-if="selected" class="card glow">
         <div class="flex" style="margin-bottom:14px">
-          <h3 style="margin:0"><span class="card-h3-icon">▶</span> {{ selected.name }}</h3>
+          <h3 style="margin:0"><Icon name="play" size="md" class="card-h3-icon" /> {{ selected.name }}</h3>
           <div class="spacer"></div>
-          <button class="btn sm primary" :disabled="hasOtherRunning" @click="doStart(selected)">🚀 启动</button>
+          <button class="btn sm primary" :disabled="hasOtherRunning" @click="doStart(selected)"><Icon name="rocket" size="sm" /> 启动</button>
         </div>
         <p class="muted" style="margin:0 0 16px;font-size:13px">{{ selected.desc }}</p>
         <p v-if="hasOtherRunning" class="warn" style="font-size:12px;margin:0 0 12px">
@@ -247,13 +249,13 @@ const otherRunningId = computed(() => {
             <div class="flex" style="margin-bottom:8px">
               <span class="muted" style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase">🔧 启动方式</span>
               <div class="spacer"></div>
-              <button class="btn sm ghost" @click="copyCmd(selected.launch_cmd)" v-if="selected.launch_cmd">📋 复制命令</button>
+              <button class="btn sm ghost" @click="copyCmd(selected.launch_cmd)" v-if="selected.launch_cmd"><Icon name="copy" size="sm" /> 复制命令</button>
             </div>
             <code class="cmd" v-if="selected.launch_cmd">{{ selected.launch_cmd }}</code>
             <div v-else class="muted" style="font-size:12px">（无可用启动命令）</div>
             <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
               <button class="btn sm" @click="openLaunchSource(selected.launch_pkg || selected.package, selected.launch_file)"
-                v-if="selected.launch_file">📄 查看 launch 源码</button>
+                v-if="selected.launch_file">查看 launch 源码</button>
               <span class="muted" style="font-size:11px;font-family:var(--font-mono);word-break:break-all" v-if="selected.launch_path">{{ selected.launch_path }}</span>
             </div>
           </div>
@@ -277,9 +279,9 @@ const otherRunningId = computed(() => {
       <!-- 工作空间 launch 详情 -->
       <div v-if="selectedWs" class="card glow">
         <div class="flex" style="margin-bottom:14px">
-          <h3 style="margin:0"><span class="card-h3-icon">▶</span> {{ selectedWs.package }} / {{ selectedWs.launch.name }}</h3>
+          <h3 style="margin:0"><Icon name="play" size="md" class="card-h3-icon" /> {{ selectedWs.package }} / {{ selectedWs.launch.name }}</h3>
           <div class="spacer"></div>
-          <button class="btn sm primary" :disabled="hasOtherRunning" @click="doStartWs">🚀 启动</button>
+          <button class="btn sm primary" :disabled="hasOtherRunning" @click="doStartWs"><Icon name="rocket" size="sm" /> 启动</button>
         </div>
         <p v-if="hasOtherRunning" class="warn" style="font-size:12px;margin:0 0 12px">
           ⚠️ 「{{ otherRunningId }}」正在运行，请先停止后再启动新功能
@@ -290,11 +292,11 @@ const otherRunningId = computed(() => {
             <div class="flex" style="margin-bottom:8px">
               <span class="muted" style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase">🔧 启动方式</span>
               <div class="spacer"></div>
-              <button class="btn sm ghost" @click="copyCmd(currentLaunchCmd())">📋 复制命令</button>
+              <button class="btn sm ghost" @click="copyCmd(currentLaunchCmd())"><Icon name="copy" size="sm" /> 复制命令</button>
             </div>
             <code class="cmd">{{ currentLaunchCmd() }}</code>
             <div style="margin-top:8px">
-              <button class="btn sm" @click="openLaunchSource(selectedWs.package, selectedWs.launch.name)">📄 查看 launch 源码</button>
+              <button class="btn sm" @click="openLaunchSource(selectedWs.package, selectedWs.launch.name)"><Icon name="file" size="sm" /> 查看 launch 源码</button>
             </div>
           </div>
           <div>
@@ -309,7 +311,7 @@ const otherRunningId = computed(() => {
 
       <!-- 正在执行的功能（实时）-->
       <div class="card running-panel" style="margin-top:20px">
-        <h3><span class="card-h3-icon">⏱️</span> 正在执行的功能</h3>
+        <h3><Icon name="bolt" size="md" class="card-h3-icon" /> 正在执行的功能</h3>
         <div v-if="runningActive.length">
           <div v-for="r in runningActive" :key="r.id" class="run-row">
             <span class="pulse"></span>
@@ -317,7 +319,7 @@ const otherRunningId = computed(() => {
             <span class="muted" style="font-size:12px;font-family:var(--font-mono)">pid {{ r.pid }}</span>
             <div class="spacer"></div>
             <a class="btn sm" :href="'#/logs?task=' + r.id" style="color:var(--accent)">日志</a>
-            <button class="btn sm danger" @click="doStop(r.id)">■ 停止</button>
+            <button class="btn sm danger" @click="doStop(r.id)"><Icon name="stop" size="sm" /> 停止</button>
           </div>
         </div>
         <div v-else class="empty" style="padding:18px;font-size:13px">暂无正在执行的功能</div>
@@ -338,16 +340,16 @@ const otherRunningId = computed(() => {
     <div v-if="modal" class="modal-mask" @click.self="closeModal">
       <div class="modal">
         <div class="flex" style="margin-bottom:8px">
-          <h3 style="margin:0">📄 {{ modal.package }} / {{ modal.launch }}</h3>
+          <h3 style="margin:0"><Icon name="file" size="md" /> {{ modal.package }} / {{ modal.launch }}</h3>
           <div class="spacer"></div>
-          <button class="btn sm ghost" @click="closeModal">✕ 关闭</button>
+          <button class="btn sm ghost" @click="closeModal"><Icon name="close" size="sm" /> 关闭</button>
         </div>
         <div class="muted" style="font-size:12px;margin-bottom:8px;word-break:break-all;font-family:var(--font-mono)">路径：{{ modal.path || '…' }}</div>
         <div v-if="modalLoading" class="empty">加载中…</div>
         <div v-else-if="modalErr" class="warn">{{ modalErr }}</div>
         <pre v-else class="src-box">{{ modal.source }}</pre>
         <div class="flex" style="margin-top:8px">
-          <button class="btn sm" @click="copyCmd(modal.path)">📋 复制路径</button>
+          <button class="btn sm" @click="copyCmd(modal.path)"><Icon name="copy" size="sm" /> 复制路径</button>
         </div>
       </div>
     </div>

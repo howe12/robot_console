@@ -5,6 +5,7 @@ import Dashboard from './views/Dashboard.vue'
 import Tasks from './views/Tasks.vue'
 import Logs from './views/Logs.vue'
 import Visual from './views/Visual.vue'
+import Icon from './components/Icon.vue'
 
 // ---- 全局共享状态 ----
 const store = reactive({
@@ -101,10 +102,10 @@ function onMouseMove(e) {
 
 // 当前视图元数据
 const views = [
-  { key: 'dashboard', label: 'Dashboard', icon: '◐', desc: '系统状态总览' },
-  { key: 'tasks',     label: 'Tasks',     icon: '◈', desc: '机器人功能控制' },
-  { key: 'logs',      label: 'Logs',      icon: '◉', desc: '实时监控 + 拓扑' },
-  { key: 'visual',    label: 'Visual',    icon: '◇', desc: '可视化与遥控' }
+  { key: 'dashboard', label: 'Dashboard', icon: 'dashboard', desc: '系统状态总览' },
+  { key: 'tasks',     label: 'Tasks',     icon: 'tasks',     desc: '机器人功能控制' },
+  { key: 'logs',      label: 'Logs',      icon: 'logs',      desc: '实时监控 + 拓扑' },
+  { key: 'visual',    label: 'Visual',    icon: 'visual',    desc: '可视化与遥控' }
 ]
 const currentView = computed(() => views.find(v => v.key === view.value) || views[0])
 
@@ -126,7 +127,7 @@ watch(view, () => viewKey.value++)
     <!-- Command Bar（顶栏 1：品牌 + 状态 + 紧急停止） -->
     <header class="cmd-bar">
       <div class="brand">
-        <span class="logo">🤖</span>
+        <Icon name="robot" size="xl" class="logo-icon" />
         <div class="brand-text">
           <div class="brand-title">SPARK</div>
           <div class="brand-sub">Robot Console</div>
@@ -146,7 +147,7 @@ watch(view, () => viewKey.value++)
       <div class="cmd-right">
         <button class="btn emergency-stop" :disabled="stopping || !activeCount"
           @click="emergencyStop" title="紧急停止所有任务 + ROS 节点">
-          <span class="stop-icon">⏹</span>
+          <Icon name="stop" size="sm" class="stop-icon" />
           {{ stopping ? '停止中…' : '紧急停止' }}
         </button>
       </div>
@@ -157,7 +158,7 @@ watch(view, () => viewKey.value++)
       <div class="nav-tabs">
         <a v-for="v in views" :key="v.key" :href="'#/' + v.key"
           class="nav-tab" :class="{ active: view === v.key }">
-          <span class="nav-icon">{{ v.icon }}</span>
+          <Icon :name="v.icon" size="md" class="nav-icon" />
           <span class="nav-label">{{ v.label }}</span>
         </a>
       </div>

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, defineProps, defineEmits } from 'vue'
 import { api } from '../api'
+import Icon from '../components/Icon.vue'
 
 const props = defineProps({
   sidebarCollapsed: { type: Boolean, default: false }
@@ -70,7 +71,8 @@ const software = computed(() => data.value?.software ?? {})
     <!-- 粘性侧边栏：上下文信息 -->
     <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
       <div class="sidebar-header">
-        <span>📊 上下文</span>
+        <Icon name="dashboard" size="md" />
+        <span>上下文</span>
         <button class="sidebar-toggle" @click="emit('toggle-sidebar')">
           {{ sidebarCollapsed ? '›' : '‹' }}
         </button>
@@ -104,7 +106,7 @@ const software = computed(() => data.value?.software ?? {})
       <div class="hero">
         <div class="hero-grid">
           <div class="hero-title">
-            <h2><span class="hero-icon">◐</span> Dashboard</h2>
+            <h2><Icon name="dashboard" size="xl" class="hero-icon" /> Dashboard</h2>
             <span class="hero-sub">系统状态总览 · 资源、传感器、ROS 图实时监控 · 每 5 秒自动刷新</span>
           </div>
           <div class="hero-actions">
@@ -142,14 +144,14 @@ const software = computed(() => data.value?.software ?? {})
         <!-- 指标卡（视差） -->
         <div class="metric-grid">
           <div class="card metric parallax">
-            <div class="label"><span class="label-icon">▲</span> CPU</div>
+            <div class="label"><Icon name="chip" size="sm" class="label-icon" /> CPU</div>
             <div class="val" :class="{ flash: cpu !== null }">
               {{ cpu !== null ? cpu.toFixed(1) : '-' }}<span class="unit">%</span>
             </div>
             <div class="bar"><i :style="{ width: (cpu || 0) + '%' }"></i></div>
           </div>
           <div class="card metric parallax">
-            <div class="label"><span class="label-icon">▣</span> 内存</div>
+            <div class="label"><Icon name="memory" size="sm" class="label-icon" /> 内存</div>
             <div class="val">
               {{ mem.percent !== undefined ? mem.percent.toFixed(0) : '-' }}<span class="unit">%</span>
             </div>
@@ -157,7 +159,7 @@ const software = computed(() => data.value?.software ?? {})
             <div class="bar"><i :style="{ width: (mem.percent || 0) + '%' }"></i></div>
           </div>
           <div class="card metric parallax">
-            <div class="label"><span class="label-icon">◔</span> 磁盘</div>
+            <div class="label"><Icon name="database" size="sm" class="label-icon" /> 磁盘</div>
             <div class="val">
               {{ disk.percent !== undefined ? disk.percent.toFixed(0) : '-' }}<span class="unit">%</span>
             </div>
@@ -165,7 +167,7 @@ const software = computed(() => data.value?.software ?? {})
             <div class="bar"><i :style="{ width: (disk.percent || 0) + '%' }"></i></div>
           </div>
           <div class="card metric parallax">
-            <div class="label"><span class="label-icon">◷</span> 运行时长</div>
+            <div class="label"><Icon name="bolt" size="sm" class="label-icon" /> 运行时长</div>
             <div class="val" style="font-size:22px">{{ fmtUptime(uptime) }}</div>
             <div class="muted sub" style="margin-top:8px">{{ hostname }}</div>
           </div>
@@ -173,7 +175,7 @@ const software = computed(() => data.value?.software ?? {})
 
         <!-- 实时传感器条 -->
         <div class="card glow" style="margin-top:24px">
-          <h3><span class="card-h3-icon">📡</span> 实时传感器 · 底盘 & 驱动</h3>
+          <h3><Icon name="signal" size="md" class="card-h3-icon" /> 实时传感器 · 底盘 & 驱动</h3>
           <template v-if="sensors.gyro">
             <div class="sensor-strip" style="margin-bottom:12px">
               <div class="sensor-cell">
@@ -205,7 +207,7 @@ const software = computed(() => data.value?.software ?? {})
           <div v-else class="empty" style="padding:24px">暂无传感器数据（请先在「Tasks」启动底盘/驱动任务）</div>
 
           <template v-if="sensors.base_sensor">
-            <h3 style="margin-top:8px"><span class="card-h3-icon">🛡️</span> 防撞 &amp; 跌落</h3>
+            <h3 style="margin-top:8px"><Icon name="warning" size="md" class="card-h3-icon" /> 防撞 &amp; 跌落</h3>
             <div class="sensor-strip">
               <div v-for="(v, k) in sensors.base_sensor" :key="k"
                    class="sensor-cell" :class="{ alert: v }">
@@ -221,7 +223,7 @@ const software = computed(() => data.value?.software ?? {})
         <!-- 外接设备 + ROS 图 -->
         <div class="grid grid-2" style="margin-top:24px">
           <div class="card">
-            <h3><span class="card-h3-icon">🔌</span> 外接设备</h3>
+            <h3><Icon name="cubeBox" size="md" class="card-h3-icon" /> 外接设备</h3>
             <div class="device-list">
               <div class="device-row">
                 <span class="device-light" :class="devices.camera?.connected ? 'ok' : 'bad'"></span>
@@ -259,7 +261,7 @@ const software = computed(() => data.value?.software ?? {})
           </div>
 
           <div class="card">
-            <h3><span class="card-h3-icon">🕸️</span> ROS2 图 · 节点 / 话题</h3>
+            <h3><Icon name="graph" size="md" class="card-h3-icon" /> ROS2 图 · 节点 / 话题</h3>
             <div class="ros-chip-cloud">
               <span v-for="n in rosGraph.nodes.slice(0, 12)" :key="'n'+n" class="ros-chip node">{{ n }}</span>
               <span v-for="t in rosGraph.topics.slice(0, 12)" :key="'t'+t" class="ros-chip topic">{{ t }}</span>

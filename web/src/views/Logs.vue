@@ -1,6 +1,7 @@
 <script setup>
 import { ref, inject, onMounted, onUnmounted, computed, watch, nextTick, defineProps, defineEmits } from 'vue'
 import { api } from '../api'
+import Icon from '../components/Icon.vue'
 import TopologyView from './TopologyView.vue'
 
 const props = defineProps({
@@ -116,7 +117,8 @@ onMounted(() => {
     <!-- 粘性侧边栏：运行中任务 + 上下文 -->
     <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
       <div class="sidebar-header">
-        <span>⏱️ 运行中</span>
+        <Icon name="bolt" size="md" />
+        <span>运行中</span>
         <button class="sidebar-toggle" @click="emit('toggle-sidebar')">{{ sidebarCollapsed ? '›' : '‹' }}</button>
       </div>
       <div class="sidebar-content">
@@ -147,7 +149,7 @@ onMounted(() => {
       <div class="hero">
         <div class="hero-grid">
           <div class="hero-title">
-            <h2><span class="hero-icon">◉</span> 实时监控</h2>
+            <h2><Icon name="logs" size="xl" class="hero-icon" /> 实时监控</h2>
             <span class="hero-sub">ROS2 拓扑 + 终端日志 · 按任务/节点/等级过滤 · 新任务自动分割线</span>
           </div>
           <div class="hero-actions">
@@ -156,7 +158,7 @@ onMounted(() => {
               已过滤
             </span>
             <button class="btn" @click="showTopo = !showTopo">
-              {{ showTopo ? '🙈 隐藏拓扑' : '🧭 显示拓扑' }}
+              <Icon name="graph" size="sm" /> {{ showTopo ? '隐藏拓扑' : '显示拓扑' }}
             </button>
           </div>
         </div>
@@ -164,15 +166,17 @@ onMounted(() => {
 
       <!-- 拓扑图（默认折叠为一条）-->
       <div v-if="!showTopo" class="collapse-bar" @click="showTopo = true">
-        <span class="collapse-icon">▶</span>
-        <span>🧭 ROS2 拓扑图 · 节点 ↔ 话题通信</span>
+        <Icon name="chevronRight" size="sm" class="collapse-icon" />
+        <Icon name="graph" size="sm" />
+        <span style="margin-left:6px">ROS2 拓扑图 · 节点 ↔ 话题通信</span>
         <span class="spacer"></span>
         <span class="muted" style="font-size:11px">点击展开</span>
       </div>
       <div v-else class="collapse-body">
         <div class="collapse-bar expanded" @click="showTopo = false" style="margin-bottom:8px">
-          <span class="collapse-icon">▼</span>
-          <span>🧭 ROS2 拓扑图</span>
+          <Icon name="chevronDown" size="sm" class="collapse-icon" />
+          <Icon name="graph" size="sm" />
+          <span style="margin-left:6px">ROS2 拓扑图</span>
           <span class="spacer"></span>
           <span class="muted" style="font-size:11px">点击折叠</span>
         </div>
@@ -183,7 +187,7 @@ onMounted(() => {
       <div class="card log-filter-bar">
         <div class="filter-chips">
           <span class="filter-chip" :class="{ active: !!taskFilter }">
-            <span>📋 任务:</span>
+            <Icon name="layers" size="sm" /> 任务:
             <select v-model="taskFilter">
               <option value="">全部</option>
               <option v-for="t in tasks" :key="t.id" :value="t.id">{{ t.name || t.id }}</option>
@@ -193,14 +197,14 @@ onMounted(() => {
             </select>
           </span>
           <span class="filter-chip" :class="{ active: !!nodeFilter }">
-            <span>📡 节点:</span>
+            <Icon name="network" size="sm" /> 节点:
             <select v-model="nodeFilter">
               <option value="">全部</option>
               <option v-for="n in uniqueNodes()" :key="n" :value="n">{{ n }}</option>
             </select>
           </span>
           <span class="filter-chip" :class="{ active: !!levelFilter }">
-            <span>⚡ 等级:</span>
+            <Icon name="filter" size="sm" /> 等级:
             <select v-model="levelFilter">
               <option value="">全部</option>
               <option value="debug">debug</option>
@@ -214,15 +218,15 @@ onMounted(() => {
           <label class="filter-chip">
             <input type="checkbox" v-model="autoScroll" style="margin:0"> 自动滚动
           </label>
-          <button class="btn sm danger" @click="clearLogs">🗑️ 清除</button>
-          <button class="btn sm" @click="loadHist">⟳ 重载</button>
+          <button class="btn sm danger" @click="clearLogs"><Icon name="trash" size="sm" /> 清除</button>
+          <button class="btn sm" @click="loadHist"><Icon name="refresh" size="sm" /> 重载</button>
         </div>
       </div>
 
       <!-- 终端日志 -->
       <div class="card" style="margin-top:16px">
         <div class="flex" style="margin-bottom:12px">
-          <h3 style="margin:0"><span class="card-h3-icon">🖥️</span> 终端日志
+          <h3 style="margin:0"><Icon name="terminal" size="md" class="card-h3-icon" /> 终端日志
             <span v-if="loadingHist" class="muted" style="margin-left:8px;font-size:12px">加载中…</span>
           </h3>
           <span class="spacer"></span>
