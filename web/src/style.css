@@ -7,11 +7,6 @@
 /* 注意：@font-face 必须放在 :root 之外，否则 minifier 会合并成 @font-face{:root{...}} */
 @font-face {
   font-family: 'HarmonyOS Sans SC';
-  src: url('./fonts/HarmonyOS-Sans-SC-Light.woff2') format('woff2');
-  font-weight: 300; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: 'HarmonyOS Sans SC';
   src: url('./fonts/HarmonyOS-Sans-SC-Regular.woff2') format('woff2');
   font-weight: 400; font-style: normal; font-display: swap;
 }
@@ -73,12 +68,11 @@
 
   /* ── 字体（SF Pro 系族 + 全平台中文回退）── */
   /* 浏览器按顺序匹配；macOS 优先 PingFang，Linux 优先 HarmonyOS（最苹方风格的开源替代）*/
+  /* Linux 关键：英文后立即放 webfont HarmonyOS，确保 Linux 不降级到 Noto Sans CJK SC */
   --font-display: 'SF Pro Display', 'SF Pro', -apple-system, BlinkMacSystemFont,
-                  system-ui,
+                  'HarmonyOS Sans SC', system-ui,
                   /* macOS 中文 */
                   'PingFang SC', 'Hiragino Sans GB',
-                  /* 本地 webfont（Linux 上苹方风格中文）*/
-                  'HarmonyOS Sans SC',
                   /* Windows 中文 */
                   'Microsoft YaHei UI', 'Microsoft YaHei', '微软雅黑',
                   /* Android / 其他 Linux */
@@ -86,19 +80,15 @@
                   'WenQuanYi Micro Hei',
                   sans-serif;
   --font-text:    'SF Pro Text', 'SF Pro', -apple-system, BlinkMacSystemFont,
-                  'Helvetica Neue', system-ui,
-                  /* macOS 中文 */
-                  'PingFang SC',
-                  /* 本地 webfont（Linux 上苹方风格中文）*/
-                  'HarmonyOS Sans SC',
+                  'Helvetica Neue', 'HarmonyOS Sans SC',
+                  'PingFang SC', system-ui,
                   /* Windows / 其他 Linux */
                   'Microsoft YaHei UI', 'Microsoft YaHei',
                   'Noto Sans SC', 'Source Han Sans CN',
                   sans-serif;
   --font-compact: 'SF Compact Display', 'SF Compact Text', -apple-system, BlinkMacSystemFont,
-                  'Helvetica Neue', system-ui,
-                  'PingFang SC', 'HarmonyOS Sans SC',
-                  'Microsoft YaHei UI', sans-serif;
+                  'Helvetica Neue', 'HarmonyOS Sans SC', system-ui,
+                  'PingFang SC', 'Microsoft YaHei UI', sans-serif;
   /* Mono: SF Mono 主，其它平台等宽 */
   --font-mono:    'SF Mono', 'JetBrains Mono', 'Fira Code', ui-monospace,
                   'Cascadia Code', Menlo, Consolas, monospace;
@@ -656,6 +646,7 @@ a { color: var(--accent); text-decoration: none; }
   padding: 8px 16px; border: 1px solid var(--border); border-radius: var(--r-md);
   cursor: pointer; background: var(--bg3); color: var(--text); font-size: 13px;
   font-weight: 500; letter-spacing: -0.005em;
+  font-family: var(--font-text);
   transition: all var(--t-fast);
   display: inline-flex; align-items: center; gap: 6px;
 }
