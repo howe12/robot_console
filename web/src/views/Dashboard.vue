@@ -1,11 +1,37 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed, defineProps, defineEmits } from 'vue'
 import { api } from '../api'
+
+const props = defineProps({
+  sidebarCollapsed: { type: Boolean, default: false }
+})
+const emit = defineEmits(['toggle-sidebar'])
 
 const data = ref(null)
 const error = ref('')
 const lastFmt = ref('')
 let timer = null
+const loading = ref(true)
+
+async function load() {
+  try {
+    const d = await api.systemStatus()
+    // 检测数值变化，触发闪烁
+    const old = data.value
+    if (old) {
+      for (const k of ['cpu', 'mem', 'disk']) {
+        if (old.system?.[k]?.percent !== d.system?.[k]?.percent) flashKey.value++
+      }
+    }
+    data.value = d
+    lastFmt.value = new Date(d.ts * 1000).toLocaleTimeString()
+    error.value = ''
+  } catch (e) {
+    error.value = String(e)
+  }
+  loading.value = false
+}
+const flashKey = ref(0)
 
 function fmtBytes(b) {
   if (b == null) return '-'
@@ -21,123 +47,232 @@ function fmtUptime(s) {
   return d > 0 ? `${d}天 ${h}时 ${m}分` : `${h}时 ${m}分`
 }
 
-async function load() {
-  try {
-    const d = await api.systemStatus()
-    data.value = d
-    lastFmt.value = new Date(d.ts * 1000).toLocaleTimeString()
-  } catch (e) {
-    error.value = String(e)
-  }
-}
-
 onMounted(() => {
   load()
   timer = setInterval(load, 5000)
 })
 onUnmounted(() => clearInterval(timer))
 
-const deviceOrder = [
-  ['camera', '相机'], ['base', '底盘'], ['lidar', '雷达'], ['arm', '机械臂']
-]
+// 派生数据
+const cpu = computed(() => data.value?.system?.cpu_percent ?? null)
+const mem = computed(() => data.value?.system?.mem ?? null)
+const disk = computed(() => data.value?.system?.disk ?? null)
+const uptime = computed(() => data.value?.system?.uptime ?? null)
+const hostname = computed(() => data.value?.system?.hostname ?? '')
+const devices = computed(() => data.value?.devices ?? {})
+const sensors = computed(() => data.value?.sensors ?? {})
+const rosGraph = computed(() => data.value?.ros_graph ?? { nodes: [], topics: [] })
+const software = computed(() => data.value?.software ?? {})
 </script>
 
 <template>
-  <div>
-    <div class="page-title">
-      <h2>📊 系统状态</h2>
-      <small>每 5 秒自动刷新 · 最后更新 {{ lastFmt }}</small>
-      <div class="spacer"></div>
-      <button class="btn" @click="load">↻ 刷新</button>
-    </div>
-    <div v-if="error" class="card warn">加载失败：{{ error }}</div>
+  <div class="layout-with-sidebar" :class="{ collapsed: sidebarCollapsed }">
+    <!-- 粘性侧边栏：上下文信息 -->
+    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+      <div class="sidebar-header">
+        <span>📊 上下文</span>
+        <button class="sidebar-toggle" @click="emit('toggle-sidebar')">
+          {{ sidebarCollapsed ? '›' : '‹' }}
+        </button>
+      </div>
+      <div class="sidebar-content">
+        <div class="muted" style="font-size:11px;letter-spacing:0.06em;margin-bottom:6px">ROS 发行版</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:14px">{{ software.ros_distro || '-' }}</div>
 
-    <template v-if="data">
-      <!-- 资源指标 -->
-      <div class="grid grid-4" style="margin-bottom:14px">
-        <div class="card metric">
-          <div class="val">{{ (data.system.cpu_percent || 0).toFixed(1) }}%</div>
-          <div class="label">CPU 使用率</div>
-          <div class="bar"><i :style="{ width: data.system.cpu_percent + '%' }"></i></div>
+        <div class="muted" style="font-size:11px;letter-spacing:0.06em;margin-bottom:6px">ROS_DOMAIN_ID</div>
+        <div style="font-family:var(--font-mono);font-size:13px;margin-bottom:14px">{{ software.ros_domain_id || '-' }}</div>
+
+        <div class="muted" style="font-size:11px;letter-spacing:0.06em;margin-bottom:6px">运行时长</div>
+        <div style="font-size:13px;margin-bottom:14px">{{ fmtUptime(uptime) }}</div>
+
+        <div class="muted" style="font-size:11px;letter-spacing:0.06em;margin-bottom:6px">包 / launch</div>
+        <div style="font-family:var(--font-mono);font-size:13px;margin-bottom:14px">
+          {{ software.packages?.length || 0 }} · {{ software.launch_count || 0 }}
         </div>
-        <div class="card metric">
-          <div class="val">{{ (data.system.mem.percent || 0).toFixed(0) }}%</div>
-          <div class="label">内存 {{ fmtBytes(data.system.mem.used) }} / {{ fmtBytes(data.system.mem.total) }}</div>
-          <div class="bar"><i :style="{ width: data.system.mem.percent + '%' }"></i></div>
+
+        <div class="muted" style="font-size:11px;letter-spacing:0.06em;margin-bottom:6px">ROS 图</div>
+        <div style="font-family:var(--font-mono);font-size:13px">
+          {{ rosGraph.nodes.length }} 节点<br>
+          {{ rosGraph.topics.length }} 话题
         </div>
-        <div class="card metric">
-          <div class="val">{{ (data.system.disk.percent || 0).toFixed(0) }}%</div>
-          <div class="label">磁盘 {{ fmtBytes(data.system.disk.free) }} 可用</div>
-          <div class="bar"><i :style="{ width: data.system.disk.percent + '%' }"></i></div>
-        </div>
-        <div class="card metric">
-          <div class="val" style="font-size:20px">{{ data.system.hostname }}</div>
-          <div class="label">运行时长 {{ fmtUptime(data.system.uptime) }}</div>
+      </div>
+    </aside>
+
+    <!-- 主内容 -->
+    <div>
+      <!-- Hero 区 -->
+      <div class="hero">
+        <div class="hero-grid">
+          <div class="hero-title">
+            <h2><span class="hero-icon">◐</span> Dashboard</h2>
+            <span class="hero-sub">系统状态总览 · 资源、传感器、ROS 图实时监控 · 每 5 秒自动刷新</span>
+          </div>
+          <div class="hero-actions">
+            <span class="hero-status">
+              <span class="dot" :class="error ? 'bad' : (data ? 'ok' : 'idle')"></span>
+              {{ error ? '连接失败' : (data ? `更新于 ${lastFmt}` : '加载中…') }}
+            </span>
+            <button class="btn" @click="load">↻  刷新</button>
+          </div>
         </div>
       </div>
 
-      <div class="grid grid-2">
-        <!-- 外接设备 -->
-        <div class="card">
-          <h3>🔌 外接设备</h3>
-          <div class="dev-list">
-            <div v-for="[key, name] in deviceOrder" :key="key" class="dev-row">
-              <span class="light" :class="data.devices[key].connected ? 'ok' : 'bad'"></span>
-              <span class="name">{{ name }}</span>
-              <span class="detail">{{ data.devices[key].connected ? (data.devices[key].type || '已连接') : '未连接' }}</span>
+      <!-- 加载中：骨架屏 -->
+      <template v-if="loading && !data">
+        <div class="metric-grid">
+          <div class="card" v-for="i in 4" :key="i">
+            <div class="skeleton text" style="width: 60%; margin-bottom: 14px"></div>
+            <div class="skeleton text-lg" style="width: 70%"></div>
+            <div class="skeleton bar"></div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:24px">
+          <div class="skeleton text" style="width: 30%; margin-bottom: 16px"></div>
+          <div class="sensor-strip">
+            <div v-for="i in 6" :key="i" class="sensor-cell">
+              <div class="skeleton text" style="width:50%"></div>
+              <div class="skeleton text-lg" style="width:80%; margin-top:8px"></div>
             </div>
           </div>
-          <h3 style="margin-top:14px">💻 软件环境</h3>
-          <table>
-            <tr><td>ROS 发行版</td><td>{{ data.software.ros_distro }}</td></tr>
-            <tr><td>ROS_DOMAIN_ID</td><td>{{ data.software.ros_domain_id || '-' }}</td></tr>
-            <tr><td>操作系统</td><td>{{ data.software.os_description }}</td></tr>
-            <tr><td>工作空间包数</td><td>{{ data.software.packages.length }} 个包 · {{ data.software.launch_count }} 个 launch</td></tr>
-          </table>
+        </div>
+      </template>
+
+      <!-- 已加载 -->
+      <template v-else-if="data">
+        <!-- 指标卡（视差） -->
+        <div class="metric-grid">
+          <div class="card metric parallax">
+            <div class="label"><span class="label-icon">▲</span> CPU</div>
+            <div class="val" :class="{ flash: cpu !== null }">
+              {{ cpu !== null ? cpu.toFixed(1) : '-' }}<span class="unit">%</span>
+            </div>
+            <div class="bar"><i :style="{ width: (cpu || 0) + '%' }"></i></div>
+          </div>
+          <div class="card metric parallax">
+            <div class="label"><span class="label-icon">▣</span> 内存</div>
+            <div class="val">
+              {{ mem.percent !== undefined ? mem.percent.toFixed(0) : '-' }}<span class="unit">%</span>
+            </div>
+            <div class="muted sub" style="margin-top:8px">{{ fmtBytes(mem.used) }} / {{ fmtBytes(mem.total) }}</div>
+            <div class="bar"><i :style="{ width: (mem.percent || 0) + '%' }"></i></div>
+          </div>
+          <div class="card metric parallax">
+            <div class="label"><span class="label-icon">◔</span> 磁盘</div>
+            <div class="val">
+              {{ disk.percent !== undefined ? disk.percent.toFixed(0) : '-' }}<span class="unit">%</span>
+            </div>
+            <div class="muted sub" style="margin-top:8px">{{ fmtBytes(disk.free) }} 可用</div>
+            <div class="bar"><i :style="{ width: (disk.percent || 0) + '%' }"></i></div>
+          </div>
+          <div class="card metric parallax">
+            <div class="label"><span class="label-icon">◷</span> 运行时长</div>
+            <div class="val" style="font-size:22px">{{ fmtUptime(uptime) }}</div>
+            <div class="muted sub" style="margin-top:8px">{{ hostname }}</div>
+          </div>
         </div>
 
-        <!-- 传感器 / 底盘状态 -->
-        <div class="card">
-          <h3>📡 底盘 &amp; 传感器 <span class="muted">（驱动运行后自动更新）</span></h3>
-          <template v-if="data.sensors.gyro">
-            <div class="sensor-grid" style="margin-bottom:10px">
-              <div class="sensor-chip"><span class="k">航向角 yaw</span><br>{{ data.sensors.gyro.yaw }}°</div>
-              <div class="sensor-chip"><span class="k">横滚 roll</span><br>{{ data.sensors.gyro.roll }}°</div>
-              <div class="sensor-chip"><span class="k">俯仰 pitch</span><br>{{ data.sensors.gyro.pitch }}°</div>
-              <div class="sensor-chip"><span class="k">角速度 wz</span><br>{{ data.sensors.gyro.anvz }}</div>
-            </div>
-            <div class="sensor-grid" style="margin-bottom:10px">
-              <div class="sensor-chip"><span class="k">里程 x</span><br>{{ data.sensors.odom.x }}m</div>
-              <div class="sensor-chip"><span class="k">里程 y</span><br>{{ data.sensors.odom.y }}m</div>
-              <div class="sensor-chip"><span class="k">线速度 vx</span><br>{{ data.sensors.odom.lin_x }}m/s</div>
+        <!-- 实时传感器条 -->
+        <div class="card glow" style="margin-top:24px">
+          <h3><span class="card-h3-icon">📡</span> 实时传感器 · 底盘 & 驱动</h3>
+          <template v-if="sensors.gyro">
+            <div class="sensor-strip" style="margin-bottom:12px">
+              <div class="sensor-cell">
+                <div class="k">航向 yaw</div>
+                <div class="v">{{ sensors.gyro.yaw }}<span class="u">°</span></div>
+              </div>
+              <div class="sensor-cell">
+                <div class="k">横滚 roll</div>
+                <div class="v">{{ sensors.gyro.roll }}<span class="u">°</span></div>
+              </div>
+              <div class="sensor-cell">
+                <div class="k">俯仰 pitch</div>
+                <div class="v">{{ sensors.gyro.pitch }}<span class="u">°</span></div>
+              </div>
+              <div class="sensor-cell">
+                <div class="k">角速度 wz</div>
+                <div class="v">{{ sensors.gyro.anvz }}</div>
+              </div>
+              <div class="sensor-cell">
+                <div class="k">里程 x</div>
+                <div class="v">{{ sensors.odom.x }}<span class="u">m</span></div>
+              </div>
+              <div class="sensor-cell">
+                <div class="k">线速度 vx</div>
+                <div class="v">{{ sensors.odom.lin_x }}<span class="u">m/s</span></div>
+              </div>
             </div>
           </template>
-          <div v-else class="empty" style="padding:18px">暂无传感器数据（请先在「任务控制」启动底盘/驱动）</div>
+          <div v-else class="empty" style="padding:24px">暂无传感器数据（请先在「Tasks」启动底盘/驱动任务）</div>
 
-          <template v-if="data.sensors.base_sensor">
-            <h3 style="margin-top:8px">🛡️ 防撞 &amp; 跌落</h3>
-            <div class="sensor-grid">
-              <div v-for="(v, k) in data.sensors.base_sensor" :key="k"
-                   class="sensor-chip" :class="v ? 'bool-trig' : 'bool-normal'">
-                <span class="k">{{ k }}</span>
-                <br>{{ v ? '触发' : '正常' }}
+          <template v-if="sensors.base_sensor">
+            <h3 style="margin-top:8px"><span class="card-h3-icon">🛡️</span> 防撞 &amp; 跌落</h3>
+            <div class="sensor-strip">
+              <div v-for="(v, k) in sensors.base_sensor" :key="k"
+                   class="sensor-cell" :class="{ alert: v }">
+                <div class="k">{{ k }}</div>
+                <div class="v" :style="{ color: v ? 'var(--red)' : 'var(--green)' }">
+                  {{ v ? '触发' : '正常' }}
+                </div>
               </div>
             </div>
           </template>
         </div>
-      </div>
 
-      <!-- ROS 图 -->
-      <div class="card" style="margin-top:14px">
-        <h3>🕸️ ROS2 图 {{ data.ros_graph.nodes.length ? `· ${data.ros_graph.nodes.length} 节点 / ${data.ros_graph.topics.length} 话题` : '' }}</h3>
-        <div class="flex" style="flex-wrap:wrap; gap:6px">
-          <span v-for="n in data.ros_graph.nodes" :key="'n'+n" class="tag green">{{ n }}</span>
-          <span v-if="data.ros_graph.nodes.length" class="spacer"></span>
-          <span v-for="t in data.ros_graph.topics" :key="'t'+t" class="tag">{{ t }}</span>
-          <span v-if="!data.ros_graph.nodes.length" class="muted">无活动节点（启动任务后显示）</span>
+        <!-- 外接设备 + ROS 图 -->
+        <div class="grid grid-2" style="margin-top:24px">
+          <div class="card">
+            <h3><span class="card-h3-icon">🔌</span> 外接设备</h3>
+            <div class="device-list">
+              <div class="device-row">
+                <span class="device-light" :class="devices.camera?.connected ? 'ok' : 'bad'"></span>
+                <span class="device-name">相机</span>
+                <span class="device-type">{{ devices.camera?.type || '-' }}</span>
+                <span class="device-status" :class="{ bad: !devices.camera?.connected }">
+                  {{ devices.camera?.connected ? '已连接' : '未连接' }}
+                </span>
+              </div>
+              <div class="device-row">
+                <span class="device-light" :class="devices.base?.connected ? 'ok' : 'bad'"></span>
+                <span class="device-name">底盘</span>
+                <span class="device-type">{{ devices.base?.type || '-' }}</span>
+                <span class="device-status" :class="{ bad: !devices.base?.connected }">
+                  {{ devices.base?.connected ? '已连接' : '未连接' }}
+                </span>
+              </div>
+              <div class="device-row">
+                <span class="device-light" :class="devices.lidar?.connected ? 'ok' : 'bad'"></span>
+                <span class="device-name">雷达</span>
+                <span class="device-type">{{ devices.lidar?.type || '-' }}</span>
+                <span class="device-status" :class="{ bad: !devices.lidar?.connected }">
+                  {{ devices.lidar?.connected ? '已连接' : '未连接' }}
+                </span>
+              </div>
+              <div class="device-row">
+                <span class="device-light" :class="devices.arm?.connected ? 'ok' : 'bad'"></span>
+                <span class="device-name">机械臂</span>
+                <span class="device-type">{{ devices.arm?.type || '-' }}</span>
+                <span class="device-status" :class="{ bad: !devices.arm?.connected }">
+                  {{ devices.arm?.connected ? '已连接' : '未连接' }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3><span class="card-h3-icon">🕸️</span> ROS2 图 · 节点 / 话题</h3>
+            <div class="ros-chip-cloud">
+              <span v-for="n in rosGraph.nodes.slice(0, 12)" :key="'n'+n" class="ros-chip node">{{ n }}</span>
+              <span v-for="t in rosGraph.topics.slice(0, 12)" :key="'t'+t" class="ros-chip topic">{{ t }}</span>
+              <span v-if="rosGraph.nodes.length > 12" class="muted" style="font-size:11px">
+                +{{ rosGraph.nodes.length - 12 }} 节点 / +{{ Math.max(0, rosGraph.topics.length - 12) }} 话题
+              </span>
+              <span v-if="!rosGraph.nodes.length && !rosGraph.topics.length" class="muted" style="font-size:13px">
+                启动任务后此处显示节点与话题
+              </span>
+            </div>
+          </div>
         </div>
-      </div>
-    </template>
-    <div v-else-if="!error" class="empty">加载中…</div>
+      </template>
+    </div>
   </div>
 </template>
