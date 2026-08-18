@@ -104,6 +104,38 @@ cd robot_console
 
 打开浏览器访问 **`http://127.0.0.1:8080`** 即可。
 
+### 局域网访问（手机/平板/另一台电脑）
+
+后端默认绑定 `0.0.0.0:8080`，同一局域网的**任何设备**都能直接访问：
+
+1. 找机器人在 LAN 里的 IP：
+   ```bash
+   hostname -I          # 例如: 192.168.100.143
+   ```
+2. 在手机/平板/电脑浏览器输入：
+   ```
+   http://192.168.100.143:8080
+   ```
+3. **无需 VNC**——纯 HTTP，浏览器原生渲染，体验远优于 VNC 转发。
+
+**防火墙配置**（如果连不上）：
+```bash
+# UFW（Ubuntu）
+sudo ufw allow 8080/tcp
+
+# firewalld（CentOS / RHEL）
+sudo firewall-cmd --permanent --add-port=8080/tcp
+sudo firewall-cmd --reload
+
+# iptables（手动）
+sudo iptables -A INPUT -p tcp --dport 8080 -j ACCEPT
+```
+
+**安全提示**：
+- 默认**无认证**——任何 LAN 用户都能控制机器人！
+- 部署到公网前必须加密码（建议加 `oauth2-proxy` 或在前置 nginx 加 basic auth）
+- 局域网内通常安全，但注意公司网环境
+
 ### 手动启动（调试用）
 
 ```bash
