@@ -18,7 +18,7 @@ const camQuality = ref(80)                       // JPEG 质量
 const camFps = ref(15)                           // 帧率
 const camAspect = ref('16:10')                   // 比例: 4:3 / 16:9 / 16:10 / 1:1
 const availableTopics = ref([])                  // ROS 图中所有 Image 话题
-const showCamSettings = ref(false)               // 设置面板展开/折叠
+const showCamSettings = ref(true)                // 设置面板默认展开（避免忘记点击）
 const velState = ref('v=0.0  w=0.0')
 const foxgloveOn = ref(false)
 const foxgloveTip = ref('')
