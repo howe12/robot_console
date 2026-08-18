@@ -1,0 +1,210 @@
+# Spark 可视化控制台 — 任务清单
+# 从 onekey.sh 提取，结构化映射：菜单 → launch 命令 + 参数模板
+# 参数 default 支持占位符：$CAMERATYPE / $LIDARTYPE / $ARMTYPE
+#   （后端 /api/tasks 返回时自动展开为设备检测结果，用户可覆盖）
+# choices 只用于展开 launch 文件名/包名占位符 {key}；pass_as_param: true
+#   的 choice 才会作为 launch 参数透传（如 voice 的 language）。
+
+# 工作空间路径（ros2 launch 前 source 用）
+workspace: /home/spark/Music/spark_humble
+
+# 设备检测定义（device_detect.py 使用）
+device:
+  camera:
+    # lsusb vendor:product → 类型
+    vendors:
+      "2bc5:0403": astrapro
+      "2bc5:0401": astra
+      "8086:0b07": d435
+  arm:
+    vendors:
+      "2341:0042": uarm
+      "2e88:4603": sagittarius_arm
+  base:
+    vendors:
+      "1a86:7523": spark_base
+  lidar:
+    type_file: /opt/lidar.txt
+    usb_id: "10c4:ea60"
+
+tasks:
+  # ===== 应用任务（对应 onekey 主菜单）=====
+  - id: teleop
+    menu: 1
+    name: "键盘遥控（让机器人动起来）"
+    desc: "wsad 前后左右，需在浏览器/终端操作"
+    package: spark_teleop
+    launch: teleop.launch.py
+    params:
+      camera_type_tel: {default: "$CAMERATYPE", desc: "相机类型"}
+      lidar_type_tel: {default: "$LIDARTYPE", desc: "雷达类型"}
+      enable_arm_tel: {default: "false", desc: "是否启用机械臂"}
+      namespace: {default: "", allow_empty: true, desc: "多机器人命名空间（留空为单机）"}
+
+  - id: follow
+    menu: 2
+    name: "让SPARK跟着你走"
+    desc: "站在正前方一米左右，人走机器人跟随"
+    package: spark_follower
+    launch: spark_follower.launch.py
+    params:
+      camera_type_tel: {default: "$CAMERATYPE", desc: "相机类型"}
+      namespace: {default: "", allow_empty: true, desc: "多机器人命名空间（留空为单机）"}
+
+  - id: slam_2d
+    menu: 3
+    name: "激光雷达建图"
+    desc: "wsad 遥控建图；退出保存地图"
+    package: spark_slam_transfer
+    launch: "start_build_map_{slam_type}.launch.py"
+    choices:
+      - key: slam_type
+        label: "SLAM 方式"
+        options:
+          - {value: gmapping, label: "gmapping"}
+          - {value: cartographer, label: "cartographer"}
+          - {value: slam_toolbox, label: "slam_toolbox"}
+        default: gmapping
+    params:
+      camera_type_tel: {default: "$CAMERATYPE", desc: "相机类型"}
+      lidar_type_tel: {default: "$LIDARTYPE", desc: "雷达类型"}
+      enable_arm_tel: {default: "false", desc: "是否启用机械臂"}
+      namespace: {default: "", allow_empty: true, desc: "多机器人命名空间（留空为单机）"}
+
+  - id: slam_3d
+    menu: 4
+    name: "深度摄像头建图"
+    desc: "rtabmap RGBD 建图（会覆盖旧地图，需确认）"
+    package: spark_rtab_map
+    launch: start_rtabmap_rgbd_sync.launch.py
+    params:
+      camera_type_tel: {default: "$CAMERATYPE", desc: "相机类型"}
+      lidar_type_tel: {default: "$LIDARTYPE", desc: "雷达类型"}
+      localization: {default: "false", desc: "定位模式"}
+      namespace: {default: "", allow_empty: true, desc: "多机器人命名空间（留空为单机）"}
+
+  - id: nav_2d
+    menu: 5
+    name: "激光雷达导航"
+    desc: "启动后 RViz 里 2D Pose Estimate 定位 → 2D Nav Goal 导航"
+    package: spark_navigation2
+    launch: start_spark_navigation2.launch.py
+    params:
+      camera_type_tel: {default: "$CAMERATYPE", desc: "相机类型"}
+      lidar_type_tel: {default: "$LIDARTYPE", desc: "雷达类型"}
+      namespace: {default: "", allow_empty: true, desc: "多机器人命名空间（留空为单机）"}
+
+  - id: nav_3d
+    menu: 6
+    name: "深度摄像头导航"
+    desc: "rtabmap 定位导航，需先建图并放回原点"
+    package: spark_rtab_map
+    launch: start_rtabmap_rgbd_sync.launch.py
+    params:
+      camera_type_tel: {default: "$CAMERATYPE", desc: "相机类型"}
+      lidar_type_tel: {default: "$LIDARTYPE", desc: "雷达类型"}
+      localization: {default: "true", desc: "定位模式"}
+      namespace: {default: "", allow_empty: true, desc: "多机器人命名空间（留空为单机）"}
+
+  - id: cal_arm
+    menu: 7
+    name: "机械臂与摄像头标定"
+    desc: "橙色标定物贴于吸盘正上方，机械臂上电"
+    package: spark_carry
+    launch: spark_carry_cal.launch.py
+    params:
+      camera_type_tel: {default: "$CAMERATYPE", desc: "相机类型"}
+      namespace: {default: "", allow_empty: true, desc: "多机器人命名空间（留空为单机）"}
+
+  - id: carry
+    menu: 8
+    name: "机械臂视觉抓取"
+    desc: "蓝色可吸附物体；相机反向向下安装（当前机器缺 swiftpro 驱动，已禁用）"
+    enabled: false
+    package: spark_carry
+    launch: "{mode}.launch.py"
+    choices:
+      - key: mode
+        label: "移动方式"
+        options:
+          - {value: spark_carry_object_fix, label: "固定位置移动"}
+          - {value: spark_carry_object, label: "方块位置调换(A to B)"}
+        default: spark_carry_object_fix
+    params:
+      camera_type_tel: {default: "$CAMERATYPE", desc: "相机类型"}
+      lidar_type_tel: {default: "$LIDARTYPE", desc: "雷达类型"}
+
+  - id: deeplearn
+    menu: 9
+    name: "深度学习检测"
+    desc: "tensorflow / yolov8 物品识别 / yolov8 肢体识别"
+    package: "{engine_pkg}"
+    launch: "{engine_launch}"
+    choices:
+      - key: engine
+        label: "推理引擎"
+        options:
+          - {value: tensorflow, label: "tensorflow 分类", engine_pkg: ros2_tensorflow, engine_launch: spark_tensorflow_launch.py, with_lidar: false}
+          - {value: yolov8_obj, label: "yolov8 物品识别", engine_pkg: spark_yolov8, engine_launch: spark_yolo_object.launch.py, with_lidar: true}
+          - {value: yolov8_pose, label: "yolov8 肢体识别", engine_pkg: spark_yolov8, engine_launch: spark_yolo_pose.launch.py, with_lidar: true}
+        default: yolov8_obj
+    params:
+      camera_type_tel: {default: "$CAMERATYPE", desc: "相机类型"}
+      lidar_type_tel: {default: "$LIDARTYPE", desc: "雷达类型"}
+      namespace: {default: "", allow_empty: true, desc: "多机器人命名空间（留空为单机）"}
+
+  - id: voice
+    menu: 10
+    name: "语音控制移动"
+    desc: "本地 vosk 语音识别，需连接麦克风"
+    package: spark_voice
+    launch: vosk_nav.launch.py
+    choices:
+      - key: language
+        label: "语音语言"
+        pass_as_param: true
+        options:
+          - {value: en-us, label: "英文"}
+          - {value: cn, label: "中文"}
+        default: cn
+    params:
+      camera_type_tel: {default: "$CAMERATYPE", desc: "相机类型"}
+      namespace: {default: "", allow_empty: true, desc: "多机器人命名空间（留空为单机）"}
+
+  # ===== 工具任务 =====
+  - id: build
+    menu: 0
+    name: "编译工作空间"
+    desc: "colcon build（在 spark_humble 下）"
+    kind: build
+
+  - id: kill_nodes
+    menu: 101
+    name: "清除所有ROS节点"
+    desc: "kill 所有 ros 进程（等同 onekey 菜单 101）"
+    kind: kill
+
+  - id: foxglove
+    menu: 99
+    name: "3D可视化服务（Foxglove）"
+    desc: "WebSocket 桥接，端口 8765；配合浏览器打开 Foxglove 看 3D 模型"
+    kind: ros2run
+    package: foxglove_bridge
+    executable: foxglove_bridge
+    args:
+      - "--ros-args"
+      - "-p"
+      - "port:=8765"
+
+  # 菜单 98 老化测试：当前 src 无 spark_test 包，标记 disabled 防止误启动
+  - id: aging_test
+    menu: 98
+    name: "老化测试（未启用）"
+    desc: "spark_test 包当前不存在，已禁用"
+    kind: launch
+    enabled: false
+    package: spark_test
+    launch: spark_test_five_minute.launch.py
+    params:
+      camera_type_tel: {default: "$CAMERATYPE", desc: "相机类型"}
+      lidar_type_tel: {default: "$LIDARTYPE", desc: "雷达类型"}

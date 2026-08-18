@@ -1,0 +1,27 @@
+# Python 虚拟环境与缓存
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# 前端构建产物（用 npm run build 重新生成）
+static/assets/
+
+# 备份与日志
+*.bak
+console.log
+static.bak.v04/
+static.bak.v05_ondemand/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+
+# 前端依赖与构建
+web/node_modules/
+web/dist/
+
+# 环境变量 / 本地配置
+.env
+.env.local

@@ -1,0 +1,338 @@
+"""Spark 可视化控制台后端（升级版）。
+
+原有接口：
+  GET  /api/tasks           任务清单（含展开后的参数默认值）
+  GET  /api/devices         设备检测（相机/雷达/底盘/机械臂）
+  POST /api/tasks/{id}/start  启动任务  body: {"params": {...}}
+  POST /api/tasks/{id}/stop   停止任务（SIGINT 优雅停止）
+  GET  /api/status          当前运行任务状态 + ROS/相机状态
+  GET  /api/logs/{id}?tail=N 任务日志
+  WS   /ws/logs             实时日志流（结构化：node/level/line）
+  GET  /api/camera/stream   MJPEG 相机推流（camera/color/image_raw 或自定义）
+  POST /api/cmd_vel         发布速度  body: {"linear": x, "angular": z}
+  GET  /                    前端单页
+
+本版本新增：
+  GET  /api/system/status   系统健康快照（资源/软件/设备/传感器/ROS图）
+  GET  /api/workspace       工作空间功能分析（包→launch→参数）
+  GET  /api/tasks/{id}/logs 日志（node/level 过滤）
+  GET  /api/logs/filters   可用 node/level 过滤器
+  POST /api/tasks/custom    按工作空间分析的包/launch 自定义启动
+  GET  /api/graph           实时 ROS2 图（节点/话题）
+
+运行：run.sh（会 source ROS2 环境）或 uvicorn main:app --host 0.0.0.0 --port 8080
+"""
+import asyncio
+from pathlib import Path
+
+import yaml
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+from device_detect import detect_devices
+from launch_manager import LaunchManager
+from ros_bridge import get_bridge, ros_available
+import system_monitor
+import workspace_analysis
+
+BASE = Path(__file__).resolve().parent
+CONFIG = yaml.safe_load((BASE / "spark_tasks.yaml").read_text())
+STATIC = BASE / "static"
+
+app = FastAPI(title="Spark Console", version="0.6.0")
+app.add_middleware(
+    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+)
+
+manager = LaunchManager(workspace=CONFIG["workspace"])
+bridge = get_bridge()
+
+app.mount("/static", StaticFiles(directory=STATIC), name="static")
+
+
+class StartBody(BaseModel):
+    params: dict = {}
+
+
+class CustomStartBody(BaseModel):
+    package: str
+    launch: str
+    params: dict = {}
+
+
+class CmdVelBody(BaseModel):
+    linear: float = 0.0
+    angular: float = 0.0
+
+
+def _expand_task_defaults(task: dict, devices: dict) -> dict:
+    """把参数默认值里的 $VAR 占位符展开为设备检测结果。"""
+    vars_map = devices.get("vars", {})
+    t = dict(task)
+    t["params"] = {}
+    for k, meta in task.get("params", {}).items():
+        m = dict(meta)
+        v = str(m.get("default", ""))
+        for var, val in vars_map.items():
+            v = v.replace("$" + var, str(val))
+        m["default"] = v
+        t["params"][k] = m
+    return t
+
+
+def _task_launch_info(task: dict, devices_vars: dict) -> dict:
+    """计算每个功能的启动信息：完整命令 / launch 文件名 / 绝对路径。"""
+    info = {"launch_cmd": "", "launch_file": "", "launch_path": None, "launch_pkg": ""}
+    try:
+        cmd = manager.build_command(task, devices_vars, {})
+        info["launch_cmd"] = cmd
+    except Exception:  # noqa: BLE001
+        pass
+    # 单独展开 package / launch 文件名（与 build_command 一致：choices → {key} 占位符）
+    try:
+        choice_vals, opt_meta = {}, {}
+        for ch in task.get("choices", []):
+            sel = ch.get("default")
+            opt = next((o for o in ch["options"] if o["value"] == sel), ch["options"][0])
+            choice_vals[ch["key"]] = opt["value"]
+            for k, v in opt.items():
+                if k not in ("value", "label"):
+                    opt_meta[k] = v
+        repl = {**choice_vals, **opt_meta}
+        pkg = task.get("package", "")
+        for k, v in repl.items():
+            pkg = pkg.replace("{%s}" % k, str(v))
+        launch_name = task.get("launch", "")
+        for k, v in repl.items():
+            launch_name = launch_name.replace("{%s}" % k, str(v))
+        info["launch_pkg"] = pkg
+        info["launch_file"] = launch_name
+        info["launch_path"] = workspace_analysis.find_launch_path(
+            CONFIG["workspace"], pkg, launch_name)
+    except Exception:  # noqa: BLE001
+        pass
+    return info
+
+
+@app.get("/")
+def index():
+    return FileResponse(STATIC / "index.html")
+
+
+@app.get("/api/tasks")
+def api_tasks():
+    devices = detect_devices(CONFIG["device"])
+    tasks = [_expand_task_defaults(t, devices) for t in CONFIG["tasks"]]
+    vars_map = devices.get("vars", {})
+    for t in tasks:
+        t.update(_task_launch_info(t.copy(), vars_map))
+    return {"ok": True, "devices": devices, "tasks": tasks}
+
+
+@app.get("/api/launch/source")
+def api_launch_source(package: str = Query(""), launch: str = Query("")):
+    """返回某个 launch 文件的源码与绝对路径（供前端跳转/查看）。"""
+    from pathlib import Path as _P
+    path = workspace_analysis.find_launch_path(CONFIG["workspace"], package, launch)
+    if not path:
+        return {"ok": False, "error": "未找到 launch 文件: %s / %s" % (package, launch)}
+    try:
+        src = _P(path).read_text(errors="replace")
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": "读取失败: %s" % e}
+    return {"ok": True, "package": package, "launch": launch, "path": path, "source": src}
+
+
+@app.get("/api/devices")
+def api_devices():
+    return {"ok": True, "devices": detect_devices(CONFIG["device"])}
+
+
+def _running_task_id() -> str | None:
+    """返回当前正在运行的任务 ID（互斥：只允许一个 demo 同时运行）。"""
+    for r in manager.status():
+        if r.get("running"):
+            return r["id"]
+    return None
+
+
+@app.post("/api/tasks/{task_id}/start")
+def api_start(task_id: str, body: StartBody):
+    task = next((t for t in CONFIG["tasks"] if t["id"] == task_id), None)
+    if not task:
+        return {"ok": False, "error": "未知任务: %s" % task_id}
+    if not task.get("enabled", True):
+        return {"ok": False, "error": "任务已禁用: %s" % task_id}
+    # 互斥：已有其他任务运行时拒绝
+    running = _running_task_id()
+    if running and running != task_id:
+        return {"ok": False, "error": "已有功能正在运行（%s），请先停止后再启动新功能" % running}
+    devices = detect_devices(CONFIG["device"])
+    result = manager.start(task, devices.get("vars", {}), body.params)
+    return {"ok": result["ok"], **result}
+
+
+@app.post("/api/tasks/custom")
+def api_task_custom(body: CustomStartBody):
+    """按工作空间分析出的 包/launch 自定义启动（绕开精编 YAML）。"""
+    # 互斥
+    running = _running_task_id()
+    if running:
+        return {"ok": False, "error": "已有功能正在运行（%s），请先停止后再启动新功能" % running}
+    devices = detect_devices(CONFIG["device"])
+    task = {
+        "id": "custom_" + body.package + "__" + body.launch.replace(".launch.py", ""),
+        "name": "%s / %s" % (body.package, body.launch),
+        "kind": "launch",
+        "package": body.package,
+        "launch": body.launch,
+        "params": {k: {"default": v} for k, v in body.params.items()},
+    }
+    result = manager.start(task, devices.get("vars", {}), body.params)
+    return {"ok": result["ok"], **result}
+
+
+@app.post("/api/tasks/{task_id}/stop")
+def api_stop(task_id: str, request: Request):
+    import datetime
+    print("[api_stop] %s 调用停止 %s (client=%s)" % (
+        datetime.datetime.now().strftime("%H:%M:%S"), task_id,
+        request.client.host if request.client else "?"))
+    return {"ok": True, **manager.stop(task_id)}
+
+
+@app.post("/api/stop-all")
+def api_stop_all(request: Request):
+    """紧急停止：停掉所有运行中的任务 + kill 全部 ROS 节点。"""
+    import datetime
+    client = request.client.host if request.client else "?"
+    print("[EMERGENCY-STOP] %s from %s" % (datetime.datetime.now().strftime("%H:%M:%S"), client))
+    stopped = []
+    for r in manager.status():
+        if r.get("running"):
+            manager.stop(r["id"])
+            stopped.append(r["id"])
+    manager.kill_all()
+    return {"ok": True, "stopped": stopped, "killed_ros": True}
+
+
+@app.get("/api/status")
+def api_status():
+    frame = bridge.latest_frame()
+    return {
+        "ok": True,
+        "running": manager.status(),
+        "ros": {
+            "available": ros_available,
+            "bridge_started": bridge.available,
+            "camera_frame": frame is not None,
+            "camera_stamp_ns": frame[1] if frame else None,
+        },
+    }
+
+
+@app.get("/api/tasks/{task_id}/logs")
+def api_logs(task_id: str, tail: int = 200,
+             node: str | None = Query(None), level: str | None = Query(None)):
+    return {"ok": True, "task_id": task_id,
+            "lines": manager.get_log(task_id, tail, node=node, level=level)}
+
+
+@app.get("/api/logs/filters")
+def api_log_filters():
+    return {"ok": True, **manager.available_filter()}
+
+
+@app.get("/api/system/status")
+def api_system_status():
+    """系统健康快照：资源 + 软件 + 设备 + 传感器 + ROS 图。"""
+    system_monitor.get_sensor_monitor().ensure_started()
+    return system_monitor.full_status(CONFIG["workspace"], CONFIG["device"])
+
+
+@app.get("/api/workspace")
+def api_workspace():
+    """工作空间功能分析：包 → launch → 参数。"""
+    return {"ok": True, "workspace": CONFIG["workspace"],
+            **workspace_analysis.discover_workspace(CONFIG["workspace"])}
+
+
+@app.get("/api/graph")
+def api_graph():
+    return {"ok": True, **system_monitor.ros_graph()}
+
+
+@app.get("/api/topology")
+def api_topology():
+    """ROS2 节点/话题/服务/动作 拓扑（rqt_graph 风格）。"""
+    return system_monitor.ros_topology()
+
+
+@app.get("/api/camera/stream")
+async def camera_stream():
+    """MJPEG 推流：multipart/x-mixed-replace，客户端断开自动停止。"""
+    if not ros_available or not bridge.ensure_started():
+        raise HTTPException(503, "ROS2 不可用（请确认后端由 run.sh 启动）")
+
+    async def gen():
+        idle = 0
+        while True:
+            frame = bridge.latest_frame()
+            if frame is None:
+                idle += 1
+                if idle > 50:  # ~10s 无帧，断开让前端显示占位
+                    break
+                await asyncio.sleep(0.2)
+                continue
+            idle = 0
+            yield (
+                b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
+                + frame[0]
+                + b"\r\n"
+            )
+            await asyncio.sleep(1.0 / 15)
+
+    return StreamingResponse(
+        gen(), media_type="multipart/x-mixed-replace; boundary=frame"
+    )
+
+
+@app.post("/api/cmd_vel")
+def api_cmd_vel(body: CmdVelBody):
+    if not bridge.ensure_started():
+        raise HTTPException(503, "ROS2 不可用（请确认后端由 run.sh 启动）")
+    bridge.publish_twist(body.linear, body.angular)
+    return {"ok": True, "linear": body.linear, "angular": body.angular}
+
+
+@app.websocket("/ws/logs")
+async def ws_logs(websocket: WebSocket):
+    await websocket.accept()
+    loop = asyncio.get_event_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+    stopped = {"flag": False}
+
+    def _on_log(task_id: str, entry: object):
+        loop.call_soon_threadsafe(queue.put_nowait, {"task_id": task_id, "entry": entry})
+
+    manager.on_log(_on_log)
+    try:
+        while True:
+            try:
+                item = await asyncio.wait_for(queue.get(), timeout=15)
+                await websocket.send_json(item)
+            except asyncio.TimeoutError:
+                await websocket.send_json({"ping": True})  # 心跳，防断线
+    except WebSocketDisconnect:
+        pass
+    finally:
+        stopped["flag"] = True
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8080)
