@@ -22,6 +22,7 @@ export const api = {
   status: () => getJson('/api/status'),
   devices: () => getJson('/api/devices'),
   systemStatus: () => getJson('/api/system/status'),
+  systemLight: () => getJson('/api/system/light'),
   workspace: () => getJson('/api/workspace'),
   graph: () => getJson('/api/graph'),
   topology: () => getJson('/api/topology'),

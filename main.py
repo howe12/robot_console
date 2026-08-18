@@ -256,6 +256,24 @@ def api_system_status():
     return system_monitor.full_status(CONFIG["workspace"], CONFIG["device"])
 
 
+@app.get("/api/system/light")
+def api_system_light():
+    """轻量系统快照（不含 ROS 图）：CPU/内存/设备/传感器/软件。
+    响应 <30ms，可高频轮询不卡 UI。Dashboard 主路径用此端点。"""
+    system_monitor.get_sensor_monitor().ensure_started()
+    from device_detect import detect_devices
+    import yaml as _yaml
+    cfg = _yaml.safe_load((BASE / "spark_tasks.yaml").read_text())["device"]
+    return {
+        "ok": True,
+        "system": system_monitor.system_metrics(),
+        "software": system_monitor.software_info(CONFIG["workspace"]),
+        "devices": detect_devices(cfg),
+        "sensors": system_monitor.get_sensor_monitor().snapshot(),
+        "ts": __import__("time").time(),
+    }
+
+
 @app.get("/api/workspace")
 def api_workspace():
     """工作空间功能分析：包 → launch → 参数。"""

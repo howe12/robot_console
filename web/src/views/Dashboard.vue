@@ -14,6 +14,7 @@ const lastFmt = ref('')
 let timer = null
 const loading = ref(true)
 const systemStats = ref(null)
+const rosGraphLoaded = ref(false)  // 首次拉过 full status 后为 true
 const wsBytes = ref(0)          // 累计 WebSocket 接收字节
 const wsLastTick = ref(0)       // 上次记录时间
 const browserInfo = ref(null)   // 浏览器端实时数据
@@ -22,13 +23,23 @@ let browserTimer = null
 
 async function load() {
   try {
-    const d = await api.systemStatus()
+    // 用轻量端点：30ms 替代 system/status 1.5s（ROS 图冷启动 1000ms+）
+    // ROS 图节点/话题改在 TopologyView（只在用户进入 Logs 视图时拉）
+    const d = await api.systemLight()
     // 检测数值变化，触发闪烁
     const old = data.value
     if (old) {
       for (const k of ['cpu', 'mem', 'disk']) {
         if (old.system?.[k]?.percent !== d.system?.[k]?.percent) flashKey.value++
       }
+    }
+    // 第一次拉取：附加拉一次 full status 获取 ros_graph（chip cloud 用）
+    if (!rosGraphLoaded.value) {
+      try {
+        const full = await api.systemStatus()
+        d.ros_graph = full.ros_graph
+        rosGraphLoaded.value = true
+      } catch (e) { /* 忽略 */ }
     }
     data.value = d
     lastFmt.value = new Date(d.ts * 1000).toLocaleTimeString()
@@ -55,12 +66,11 @@ function fmtUptime(s) {
 }
 
 onMounted(() => {
-  // 主数据轮询（含 /api/system/status 重负载端点：500-800ms）
-  // 5s 太频繁（每 2 次有 1 次冷启动 1.6s）→ 改 12s 几乎必命中缓存
-  // VNC/远程环境自动 30s
+  // 主数据轮询用轻量端点（/api/system/light，<30ms，无 ROS 图）
+  // ROS 图节点/话题改在 TopologyView（仅 Logs 视图需要时拉取）
   load()
   const isRemote = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  const mainPollMs = isRemote ? 30000 : 12000
+  const mainPollMs = isRemote ? 12000 : 6000
   timer = setInterval(load, mainPollMs)
   // 网络分析：后端 stats（极轻 1.5ms）+ 浏览器实时（无请求）
   loadStats()

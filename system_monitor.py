@@ -158,7 +158,7 @@ def _run_ros2_parallel(args_list: list[list[str]], timeout: float = 8.0) -> list
 
 
 _graph_cache = {"ts": 0.0, "data": None}
-_GRAPH_TTL = 6.0  # 加大缓存窗口，确保 Dashboard 8s 间隔必命中
+_GRAPH_TTL = 12.0  # 大于 Dashboard 8s 轮询间隔，确保缓存命中
 
 
 def ros_graph() -> dict:
@@ -204,7 +204,7 @@ def ros_graph() -> dict:
 
 
 _topology_cache = {"ts": 0.0, "data": None}
-_TOPOLOGY_TTL = 6.0  # 加大缓存窗口，确保 Dashboard 8s 间隔必命中
+_TOPOLOGY_TTL = 12.0  # 大于 Dashboard 8s 轮询间隔，确保缓存命中
 
 
 # 已知功能包 → 分组映射（用于把节点归类到驱动/感知/应用等层）
