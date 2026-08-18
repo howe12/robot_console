@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted, computed, watch, defineProps, defineEmits } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, defineProps, defineEmits, inject } from 'vue'
 import { api } from '../api'
 import Icon from '../components/Icon.vue'
 
@@ -7,6 +7,8 @@ const props = defineProps({
   sidebarCollapsed: { type: Boolean, default: false }
 })
 const emit = defineEmits(['toggle-sidebar'])
+// 注入全局日志 store（从 App.vue provide('logStore')）
+const store = inject('logStore', { entries: [], perTask: {}, running: [] })
 
 const data = ref(null)
 const error = ref('')
