@@ -82,9 +82,16 @@ function connectLogs() {
 onMounted(() => {
   onHash()
   window.addEventListener('hashchange', onHash)
+  // 远程会话检测：标记 <body data-remote> 关闭持续动画（VNC/Terminal Server）
+  if (isRemoteSession()) {
+    document.body.setAttribute('data-remote', 'true')
+    console.info('[remote] VNC / reduced-motion 会话检测：持续动画已关闭')
+  }
   connectLogs()
   loadStatus()
-  statusTimer = setInterval(loadStatus, 5000)
+  // 轮询频率：默认 5s，VNC/远程环境自动 15s（连续动画和重绘会拖慢远程会话）
+  const pollMs = isRemoteSession() ? 15000 : 5000
+  statusTimer = setInterval(loadStatus, pollMs)
 })
 onUnmounted(() => {
   window.removeEventListener('hashchange', onHash)
@@ -92,13 +99,24 @@ onUnmounted(() => {
   if (statusTimer) clearInterval(statusTimer)
 })
 
-// 视差：鼠标移动时更新 CSS 变量
-function onMouseMove(e) {
-  const x = (e.clientX / window.innerWidth - 0.5) * 2  // -1..1
-  const y = (e.clientY / window.innerHeight - 0.5) * 2
-  document.documentElement.style.setProperty('--mx', x.toFixed(3))
-  document.documentElement.style.setProperty('--my', y.toFixed(3))
+// 检测远程/VNC 会话：VNC/Terminal Services/Citrix 等场景下禁用持续动画
+function isRemoteSession() {
+  if (typeof navigator === 'undefined') return false
+  // 1. 系统级偏好（用户或 OS 主动设置的）
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return true
+  // 2. 显式 query 参数：?low=1 强制低性能模式
+  if (location.search.includes('low=1') || location.hash.includes('low=1')) return true
+  // 3. User-Agent 嗅探（VNC / Citrix / RDP）
+  const ua = navigator.userAgent || ''
+  if (/vnc|remmina|tigervnc|tightvnc|realvnc|xtigervnc|citrix|terminalserver/i.test(ua)) return true
+  // 4. 屏幕像素比异常低（VNC 通常 1.0）+ 设备内存 < 4GB 也算
+  if (window.devicePixelRatio && window.devicePixelRatio < 1) return true
+  if (navigator.deviceMemory && navigator.deviceMemory < 4) return true
+  return false
 }
+
+// 视差已禁用：mousemove 监听会触发整页重绘，VNC 上完全没必要
+// 原始 onMouseMove 函数已删除
 
 // 当前视图元数据
 const views = [
@@ -115,7 +133,7 @@ watch(view, () => viewKey.value++)
 </script>
 
 <template>
-  <div class="shell" @mousemove="onMouseMove">
+  <div class="shell">
     <!-- 极光背景层 -->
     <div class="aurora" aria-hidden="true">
       <div class="aurora-blob blob-1"></div>

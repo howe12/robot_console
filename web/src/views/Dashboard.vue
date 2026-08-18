@@ -50,7 +50,9 @@ function fmtUptime(s) {
 
 onMounted(() => {
   load()
-  timer = setInterval(load, 5000)
+  // 轮询频率：默认 5s，VNC/远程环境自动 15s
+  const pollMs = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 15000 : 5000
+  timer = setInterval(load, pollMs)
 })
 onUnmounted(() => clearInterval(timer))
 
@@ -143,14 +145,14 @@ const software = computed(() => data.value?.software ?? {})
       <template v-else-if="data">
         <!-- 指标卡（视差） -->
         <div class="metric-grid">
-          <div class="card metric parallax">
+          <div class="card metric">
             <div class="label"><Icon name="chip" size="sm" class="label-icon" /> CPU</div>
             <div class="val" :class="{ flash: cpu !== null }">
               {{ cpu !== null ? cpu.toFixed(1) : '-' }}<span class="unit">%</span>
             </div>
             <div class="bar"><i :style="{ width: (cpu || 0) + '%' }"></i></div>
           </div>
-          <div class="card metric parallax">
+          <div class="card metric">
             <div class="label"><Icon name="memory" size="sm" class="label-icon" /> 内存</div>
             <div class="val">
               {{ mem.percent !== undefined ? mem.percent.toFixed(0) : '-' }}<span class="unit">%</span>
@@ -158,7 +160,7 @@ const software = computed(() => data.value?.software ?? {})
             <div class="muted sub" style="margin-top:8px">{{ fmtBytes(mem.used) }} / {{ fmtBytes(mem.total) }}</div>
             <div class="bar"><i :style="{ width: (mem.percent || 0) + '%' }"></i></div>
           </div>
-          <div class="card metric parallax">
+          <div class="card metric">
             <div class="label"><Icon name="database" size="sm" class="label-icon" /> 磁盘</div>
             <div class="val">
               {{ disk.percent !== undefined ? disk.percent.toFixed(0) : '-' }}<span class="unit">%</span>
@@ -166,7 +168,7 @@ const software = computed(() => data.value?.software ?? {})
             <div class="muted sub" style="margin-top:8px">{{ fmtBytes(disk.free) }} 可用</div>
             <div class="bar"><i :style="{ width: (disk.percent || 0) + '%' }"></i></div>
           </div>
-          <div class="card metric parallax">
+          <div class="card metric">
             <div class="label"><Icon name="bolt" size="sm" class="label-icon" /> 运行时长</div>
             <div class="val" style="font-size:22px">{{ fmtUptime(uptime) }}</div>
             <div class="muted sub" style="margin-top:8px">{{ hostname }}</div>

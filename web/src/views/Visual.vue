@@ -116,7 +116,9 @@ onMounted(() => {
   window.addEventListener('keyup', onKeyUp)
   checkFoxglove()
   refreshDevices().then(() => loading.value = false)
-  statusTimer = setInterval(() => { checkFoxglove(); refreshDevices() }, 4000)
+  // 轮询频率：默认 4s，VNC/远程环境自动 12s（相机状态不需要那么频繁刷新）
+  const pollMs = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 12000 : 4000
+  statusTimer = setInterval(() => { checkFoxglove(); refreshDevices() }, pollMs)
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeyDown)

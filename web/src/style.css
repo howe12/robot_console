@@ -1157,3 +1157,44 @@ th {
 /* SVG 默认渐变（icon 配色） */
 .icon-grad-1 { fill: url(#gradAccent); stroke: none; }
 .icon-grad-2 { fill: url(#gradGreen); stroke: none; }
+
+/* ============================================================
+ * VNC / 远程会话优化：关闭所有持续动画
+ * 触发条件：用户系统级偏好 reduced-motion，或 VNC User-Agent 检测
+ * ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  /* 关闭所有持续循环动画（极光、脉冲、shimmer、logo float） */
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  /* 极光背景固定不漂移（避免 GPU 持续合成） */
+  .aurora-blob { animation: none !important; }
+  /* 进度条 shimmer 关闭 */
+  .bar > i::after { animation: none !important; }
+  /* 鼠标视差固定 */
+  .metric.parallax { transform: none !important; }
+  /* logo 浮动关闭 */
+  .logo-icon { animation: none !important; }
+  /* 紧急停止 pulse 关闭 */
+  .emergency-stop { animation: none !important; }
+  .dot.live { animation: none !important; }
+}
+
+/* VNC/远程会话：通过 JS 标记 <body data-remote> 时同样关闭 */
+body[data-remote="true"] *,
+body[data-remote="true"] *::before,
+body[data-remote="true"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+body[data-remote="true"] .aurora-blob,
+body[data-remote="true"] .metric.parallax,
+body[data-remote="true"] .logo-icon,
+body[data-remote="true"] .emergency-stop,
+body[data-remote="true"] .dot.live {
+  animation: none !important;
+  transform: none !important;
+}
