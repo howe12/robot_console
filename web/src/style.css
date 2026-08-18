@@ -1189,3 +1189,18 @@ body[data-remote="true"] .dot.live {
   animation: none !important;
   transform: none !important;
 }
+
+/* VNC 关键优化：禁用 backdrop-filter（玻璃模糊是 VNC 帧编码的最大成本之一） */
+body[data-remote="true"] .cmd-bar,
+body[data-remote="true"] .nav-bar,
+body[data-remote="true"] .status-chip,
+body[data-remote="true"] .stop-banner,
+body[data-remote="true"] .modal,
+body[data-remote="true"] .card,
+body[data-remote="true"] .terminal,
+body[data-remote="true"] .foxglove-box,
+body[data-remote="true"] .sidebar {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: var(--bg2) !important;
+}

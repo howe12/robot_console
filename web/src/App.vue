@@ -74,9 +74,11 @@ function connectLogs() {
     const e = msg.entry
     if (!store.perTask[e.task_id]) store.perTask[e.task_id] = []
     store.perTask[e.task_id].push(e)
-    if (store.perTask[e.task_id].length > 500) store.perTask[e.task_id].shift()
+    // VNC 模式：log 上限更小（减少内存 + VNC 帧编码量）
+    const logLimit = document.body.getAttribute('data-remote') === 'true' ? 200 : 500
+    if (store.perTask[e.task_id].length > logLimit) store.perTask[e.task_id].shift()
     store.entries.push({ ...e })
-    if (store.entries.length > 800) store.entries.shift()
+    if (store.entries.length > (logLimit * 1.6)) store.entries.shift()
   }
 }
 onMounted(() => {
