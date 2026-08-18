@@ -328,32 +328,56 @@ def api_system_stats():
 
 
 @app.get("/api/camera/stream")
-async def camera_stream():
-    """MJPEG 推流：multipart/x-mixed-replace，客户端断开自动停止。"""
-    if not ros_available or not bridge.ensure_started():
+async def camera_stream(
+    topic: str = Query("camera/color/image_raw", description="ROS2 图像话题名"),
+    width: int = Query(640, description="最大宽度（等比缩放）"),
+    quality: int = Query(80, ge=30, le=95, description="JPEG 质量 30-95"),
+    fps: int = Query(15, ge=1, le=60, description="帧率限制 1-60"),
+):
+    """MJPEG 推流：multipart/x-mixed-replace，客户端断开自动停止。
+    支持 query 参数：topic（话题名）、width（宽度）、quality（质量）、fps（帧率）。"""
+    if not ros_available:
         raise HTTPException(503, "ROS2 不可用（请确认后端由 run.sh 启动）")
 
+    from ros_bridge import StreamContext
+    ctx = StreamContext(topic=topic, width=width, quality=quality, fps=fps)
+    if not ctx.start():
+        raise HTTPException(503, f"无法订阅话题: {topic}（检查话题名是否正确）")
+
     async def gen():
-        idle = 0
-        while True:
-            frame = bridge.latest_frame()
-            if frame is None:
-                idle += 1
-                if idle > 50:  # ~10s 无帧，断开让前端显示占位
-                    break
-                await asyncio.sleep(0.2)
-                continue
+        try:
             idle = 0
-            yield (
-                b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
-                + frame[0]
-                + b"\r\n"
-            )
-            await asyncio.sleep(1.0 / 15)
+            while True:
+                frame = ctx.latest_frame()
+                if frame is None:
+                    idle += 1
+                    if idle > 50:
+                        break
+                    await asyncio.sleep(0.2)
+                    continue
+                idle = 0
+                yield (
+                    b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
+                    + frame[0]
+                    + b"\r\n"
+                )
+                await asyncio.sleep(1.0 / fps)
+        finally:
+            ctx.stop()
 
     return StreamingResponse(
         gen(), media_type="multipart/x-mixed-replace; boundary=frame"
     )
+
+
+@app.get("/api/ros/image_topics")
+def api_ros_image_topics():
+    """列出 ROS 图中所有 sensor_msgs/Image 话题（供前端选择相机话题用）"""
+    if not ros_available:
+        return {"ok": False, "error": "ROS2 不可用", "topics": []}
+    from ros_bridge import list_image_topics
+    topics = list_image_topics()
+    return {"ok": True, "topics": topics}
 
 
 @app.post("/api/cmd_vel")

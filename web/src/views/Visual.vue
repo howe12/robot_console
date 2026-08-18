@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted, inject, defineProps, defineEmits } from 'vue'
-import { api } from '../api'
+import { api, cameraStreamURL } from '../api'
 import Icon from '../components/Icon.vue'
 
 const props = defineProps({
@@ -11,6 +11,14 @@ const emit = defineEmits(['toggle-sidebar'])
 const store = inject('logStore')
 const camHref = ref('')
 const camState = ref('未连接')
+// 相机控件
+const camTopic = ref('camera/color/image_raw')   // 当前话题
+const camWidth = ref(640)                        // 最大宽度
+const camQuality = ref(80)                       // JPEG 质量
+const camFps = ref(15)                           // 帧率
+const camAspect = ref('16:10')                   // 比例: 4:3 / 16:9 / 16:10 / 1:1
+const availableTopics = ref([])                  // ROS 图中所有 Image 话题
+const showCamSettings = ref(false)               // 设置面板展开/折叠
 const velState = ref('v=0.0  w=0.0')
 const foxgloveOn = ref(false)
 const foxgloveTip = ref('')
@@ -69,8 +77,19 @@ function onKeyUp(e) {
   if (['w','a','s','d'].includes(k)) release(k)
 }
 
+async function loadCamTopics() {
+  try {
+    const r = await api.imageTopics()
+    availableTopics.value = r.topics || []
+  } catch (e) { /* 忽略 */ }
+}
 function startCam() {
-  camHref.value = '/api/camera/stream'
+  camHref.value = cameraStreamURL({
+    topic: camTopic.value,
+    width: camWidth.value,
+    quality: camQuality.value,
+    fps: camFps.value
+  })
   camState.value = '连接中…'
   const img = new Image()
   img.onerror = () => { camState.value = '无画面（请启动相机任务）' }
@@ -112,6 +131,7 @@ async function initAll() {
 }
 onMounted(() => {
   startCam()
+  loadCamTopics()
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
   checkFoxglove()
@@ -216,7 +236,60 @@ onUnmounted(() => {
           <h3><Icon name="camera" size="md" class="card-h3-icon" /> 相机画面 · 16:10</h3>
           <div class="cam-hero">
             <div class="cam-film top">REC · {{ camState }}</div>
-            <img v-if="camHref" :src="camHref" alt="相机画面" />
+            <!-- 相机控件条 -->
+            <div class="cam-controls">
+              <button class="cam-toggle" @click="showCamSettings = !showCamSettings">
+                <Icon name="settings" size="sm" /> 设置
+              </button>
+              <span class="cam-status">{{ camState }}</span>
+            </div>
+            <div v-if="showCamSettings" class="cam-settings">
+              <label>话题
+                <select v-model="camTopic" @change="startCam()">
+                  <option v-for="t in availableTopics" :key="t.name" :value="t.name">
+                    {{ t.name }} <span class="muted">({{ t.types[0]?.split('/').pop() }})</span>
+                  </option>
+                </select>
+              </label>
+              <label>宽度
+                <select v-model.number="camWidth" @change="startCam()">
+                  <option :value="320">320</option>
+                  <option :value="480">480</option>
+                  <option :value="640">640</option>
+                  <option :value="800">800</option>
+                  <option :value="1280">1280</option>
+                </select>
+              </label>
+              <label>质量
+                <select v-model.number="camQuality" @change="startCam()">
+                  <option :value="50">50</option>
+                  <option :value="65">65</option>
+                  <option :value="80">80</option>
+                  <option :value="90">90</option>
+                  <option :value="95">95</option>
+                </select>
+              </label>
+              <label>帧率
+                <select v-model.number="camFps" @change="startCam()">
+                  <option :value="5">5</option>
+                  <option :value="10">10</option>
+                  <option :value="15">15</option>
+                  <option :value="24">24</option>
+                  <option :value="30">30</option>
+                </select>
+              </label>
+              <label>比例
+                <select v-model="camAspect">
+                  <option value="4:3">4:3 (D435)</option>
+                  <option value="16:9">16:9 (宽屏)</option>
+                  <option value="16:10">16:10</option>
+                  <option value="1:1">1:1</option>
+                </select>
+              </label>
+              <button class="btn sm" @click="startCam(); loadCamTopics()">↻ 刷新话题</button>
+            </div>
+            <div v-if="!availableTopics.length" class="cam-tip muted">💡 启动 spark_bringup 后这里会自动列出相机话题</div>
+            <img v-if="camHref" :src="camHref" alt="相机画面" :class="'cam-aspect-' + camAspect.replace(':', 'x')" />
             <div v-else class="empty" style="padding:60px">相机未连接</div>
             <div class="cam-film bottom">FOX-LIVE · D435</div>
           </div>

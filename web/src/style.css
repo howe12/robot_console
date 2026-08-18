@@ -1050,8 +1050,47 @@ th {
     inset 0 0 32px rgba(0, 0, 0, 0.5),
     0 0 0 1px var(--accent-soft),
     0 0 32px var(--accent-glow);
+  transition: aspect-ratio var(--t-base);
 }
 .cam-hero img { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* 动态 aspect（覆盖默认 16:10） */
+.cam-hero img.cam-aspect-4x3 { aspect-ratio: 4 / 3; }
+.cam-hero img.cam-aspect-16x9 { aspect-ratio: 16 / 9; }
+.cam-hero img.cam-aspect-16x10 { aspect-ratio: 16 / 10; }
+.cam-hero img.cam-aspect-1x1 { aspect-ratio: 1 / 1; }
+
+/* 相机控件 */
+.cam-controls {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+  font-size: 12px;
+}
+.cam-toggle {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 12px; border-radius: var(--r-md);
+  background: var(--bg3); border: 1px solid var(--border);
+  color: var(--text-2); font-size: 12px; cursor: pointer;
+  transition: all var(--t-fast);
+}
+.cam-toggle:hover { border-color: var(--accent); color: var(--text); }
+.cam-status { color: var(--muted); font-family: var(--font-mono); font-size: 11px; margin-left: auto; }
+.cam-settings {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px;
+  padding: 12px; margin-bottom: 12px;
+  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r-md);
+  animation: viewIn var(--t-spring);
+}
+.cam-settings label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 11px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase;
+}
+.cam-settings select {
+  background: var(--bg2); border: 1px solid var(--border); color: var(--text);
+  padding: 6px 10px; border-radius: var(--r-sm); font-size: 12px;
+  cursor: pointer; transition: border-color var(--t-fast);
+  text-transform: none; letter-spacing: 0;
+}
+.cam-settings select:hover, .cam-settings select:focus { border-color: var(--accent); outline: none; }
+.cam-tip { padding: 8px 12px; font-size: 12px; margin-bottom: 8px; }
 .cam-film {
   position: absolute; left: 0; right: 0; height: 24px;
   background: linear-gradient(180deg, #000, transparent);

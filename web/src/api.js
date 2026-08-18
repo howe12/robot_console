@@ -27,6 +27,7 @@ export const api = {
   graph: () => getJson('/api/graph'),
   topology: () => getJson('/api/topology'),
   systemStats: () => getJson('/api/system/stats'),
+  imageTopics: () => getJson('/api/ros/image_topics'),
   taskLogs: (id, tail = 300, node, level) => {
     const q = new URLSearchParams({ tail: String(tail) })
     if (node) q.set('node', node)
@@ -44,5 +45,12 @@ export const api = {
   cmdVel: (linear, angular) => postJson('/api/cmd_vel', { linear, angular })
 }
 
-export const cameraStreamURL = (topic = 'camera/color/image_raw') =>
-  `/api/camera/stream`
+export const cameraStreamURL = (opts = {}) => {
+  const p = new URLSearchParams()
+  if (opts.topic) p.set('topic', opts.topic)
+  if (opts.width) p.set('width', String(opts.width))
+  if (opts.quality) p.set('quality', String(opts.quality))
+  if (opts.fps) p.set('fps', String(opts.fps))
+  const q = p.toString()
+  return q ? `/api/camera/stream?${q}` : '/api/camera/stream'
+}
