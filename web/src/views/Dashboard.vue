@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted, computed, defineProps, defineEmits } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, defineProps, defineEmits } from 'vue'
 import { api } from '../api'
 import Icon from '../components/Icon.vue'
 
@@ -13,6 +13,12 @@ const error = ref('')
 const lastFmt = ref('')
 let timer = null
 const loading = ref(true)
+const systemStats = ref(null)
+const wsBytes = ref(0)          // 累计 WebSocket 接收字节
+const wsLastTick = ref(0)       // 上次记录时间
+const browserInfo = ref(null)   // 浏览器端实时数据
+let statsTimer = null
+let browserTimer = null
 
 async function load() {
   try {
@@ -53,8 +59,27 @@ onMounted(() => {
   // 轮询频率：默认 5s，VNC/远程环境自动 15s
   const pollMs = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 15000 : 5000
   timer = setInterval(load, pollMs)
+  // 网络分析：后端 stats + 浏览器实时（更频繁，2s）
+  loadStats()
+  loadBrowser()
+  statsTimer = setInterval(loadStats, pollMs)
+  browserTimer = setInterval(loadBrowser, 2000)
+  // 监听 store 的 log entries 累加 WebSocket 字节
+  watch(() => store.entries.length, (newLen, oldLen) => {
+    if (newLen > oldLen) {
+      for (let i = oldLen; i < newLen; i++) {
+        // 估算每条 entry 序列化大小
+        const e = store.entries[i]
+        if (e) wsBytes.value += (e.line?.length || 0) + (e.node?.length || 0) + 30
+      }
+    }
+  })
 })
-onUnmounted(() => clearInterval(timer))
+onUnmounted(() => {
+  clearInterval(timer)
+  clearInterval(statsTimer)
+  clearInterval(browserTimer)
+})
 
 // 派生数据
 const cpu = computed(() => data.value?.system?.cpu_percent ?? null)
@@ -66,6 +91,32 @@ const devices = computed(() => data.value?.devices ?? {})
 const sensors = computed(() => data.value?.sensors ?? {})
 const rosGraph = computed(() => data.value?.ros_graph ?? { nodes: [], topics: [] })
 const software = computed(() => data.value?.software ?? {})
+
+// 网络分析：后端 stats + 浏览器 stats
+async function loadStats() {
+  try { systemStats.value = await api.systemStats() } catch (e) {}
+}
+function loadBrowser() {
+  const mem = performance.memory ? {
+    used: (performance.memory.usedJSHeapSize / 1048576).toFixed(1),
+    total: (performance.memory.totalJSHeapSize / 1048576).toFixed(1)
+  } : null
+  browserInfo.value = {
+    jsHeapMb: mem,
+    dom: document.querySelectorAll('*').length,
+    svg: document.querySelectorAll('svg').length,
+    wsEntries: store.entries.length,
+    wsBytes: wsBytes.value
+  }
+}
+
+// CPU 数字颜色：低/中/高三色
+function cpuColor(p) {
+  if (p === null || p === undefined) return ''
+  if (p < 30) return 'color: var(--green)'
+  if (p < 70) return 'color: var(--yellow)'
+  return 'color: var(--red)'
+}
 </script>
 
 <template>
@@ -274,6 +325,75 @@ const software = computed(() => data.value?.software ?? {})
                 启动任务后此处显示节点与话题
               </span>
             </div>
+          </div>
+        </div>
+
+        <!-- 网络 / 资源分析 -->
+        <div class="card glow" style="margin-top:24px">
+          <div class="flex" style="margin-bottom:14px">
+            <h3 style="margin:0"><Icon name="bolt" size="md" class="card-h3-icon" /> 网络 / 资源分析
+              <span v-if="systemStats" class="muted" style="font-weight:400;margin-left:10px;font-size:12px;font-family:var(--font-mono)">
+                PID {{ systemStats.pid }} · uptime {{ fmtUptime(systemStats.uptime) }} · 线程 {{ systemStats.threads }}
+              </span>
+            </h3>
+            <div class="spacer"></div>
+            <span class="muted" style="font-size:11px;font-family:var(--font-mono)">每 2s 刷新</span>
+          </div>
+          <div class="grid grid-4" style="gap:12px">
+            <div class="metric">
+              <div class="label">后端 CPU</div>
+              <div class="val" :style="cpuColor(systemStats?.cpu_percent)">
+                {{ systemStats?.cpu_percent !== null && systemStats?.cpu_percent !== undefined ? systemStats.cpu_percent.toFixed(1) : '—' }}<span class="unit">%</span>
+              </div>
+              <div class="bar"><i :style="{ width: (systemStats?.cpu_percent || 0) + '%' }"></i></div>
+            </div>
+            <div class="metric">
+              <div class="label">后端内存 (RSS)</div>
+              <div class="val">
+                {{ systemStats?.rss_mb !== null && systemStats?.rss_mb !== undefined ? systemStats.rss_mb.toFixed(0) : '—' }}<span class="unit">MB</span>
+              </div>
+              <div class="muted sub" style="margin-top:6px;font-size:12px">虚拟 {{ systemStats?.vms_mb?.toFixed(0) || '—' }} MB</div>
+            </div>
+            <div class="metric">
+              <div class="label">WebSocket 客户端</div>
+              <div class="val" style="font-size:32px">{{ systemStats?.ws_clients ?? '—' }}</div>
+              <div class="muted sub" style="margin-top:6px;font-size:12px">
+                运行中任务: {{ systemStats?.running_tasks ?? '—' }}
+              </div>
+            </div>
+            <div class="metric">
+              <div class="label">浏览器 JS 堆</div>
+              <div class="val">
+                {{ browserInfo?.jsHeapMb?.used || '—' }}<span class="unit">MB</span>
+              </div>
+              <div class="muted sub" style="margin-top:6px;font-size:12px">
+                DOM {{ browserInfo?.dom || '—' }} · SVG {{ browserInfo?.svg || '—' }}
+              </div>
+            </div>
+          </div>
+          <div class="grid grid-3" style="gap:12px;margin-top:12px">
+            <div class="metric">
+              <div class="label">WebSocket 日志条目</div>
+              <div class="val" style="font-size:24px">{{ browserInfo?.wsEntries || 0 }}</div>
+              <div class="muted sub" style="margin-top:4px;font-size:11px">最近 1000 条累计</div>
+            </div>
+            <div class="metric">
+              <div class="label">WebSocket 累计流量</div>
+              <div class="val" style="font-size:24px">
+                {{ browserInfo ? (browserInfo.wsBytes / 1024).toFixed(1) : '0' }}<span class="unit">KB</span>
+              </div>
+              <div class="muted sub" style="margin-top:4px;font-size:11px">实时累加</div>
+            </div>
+            <div class="metric">
+              <div class="label">JS 堆总容量</div>
+              <div class="val" style="font-size:24px">
+                {{ browserInfo?.jsHeapMb?.total || '—' }}<span class="unit">MB</span>
+              </div>
+              <div class="muted sub" style="margin-top:4px;font-size:11px">v8 分配</div>
+            </div>
+          </div>
+          <div v-if="systemStats?.psutil_missing" class="warn" style="margin-top:12px;font-size:12px">
+            ⚠ psutil 未安装，部分指标不可用。运行: pip install psutil
           </div>
         </div>
       </template>

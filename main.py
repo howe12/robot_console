@@ -43,6 +43,9 @@ CONFIG = yaml.safe_load((BASE / "spark_tasks.yaml").read_text())
 STATIC = BASE / "static"
 
 app = FastAPI(title="Spark Console", version="0.6.0")
+
+# 活跃 WebSocket 客户端集合（用于 /api/system/stats 显示连接数）
+_ws_clients: set = set()
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
@@ -271,6 +274,41 @@ def api_topology():
     return system_monitor.ros_topology()
 
 
+@app.get("/api/system/stats")
+def api_system_stats():
+    """后端进程级运行时统计：CPU / 内存 / WS 客户端 / 启动时间。"""
+    import os, time
+    try:
+        import psutil
+        proc = psutil.Process(os.getpid())
+        with proc.oneshot():
+            cpu = proc.cpu_percent(interval=None)
+            mem = proc.memory_info()
+            create_time = proc.create_time()
+            threads = proc.num_threads()
+        return {
+            "ok": True,
+            "pid": os.getpid(),
+            "uptime": time.time() - create_time,
+            "cpu_percent": cpu,
+            "rss_mb": mem.rss / 1048576,
+            "vms_mb": mem.vms / 1048576,
+            "threads": threads,
+            "ws_clients": len(_ws_clients),
+            "running_tasks": sum(1 for r in manager.status() if r.get("running")),
+            "ts": time.time(),
+        }
+    except ImportError:
+        # psutil 不可用时降级到基础信息
+        return {
+            "ok": True, "pid": os.getpid(), "uptime": None,
+            "cpu_percent": None, "rss_mb": None, "vms_mb": None,
+            "threads": None, "ws_clients": len(_ws_clients),
+            "running_tasks": sum(1 for r in manager.status() if r.get("running")),
+            "ts": time.time(), "psutil_missing": True,
+        }
+
+
 @app.get("/api/camera/stream")
 async def camera_stream():
     """MJPEG 推流：multipart/x-mixed-replace，客户端断开自动停止。"""
@@ -319,6 +357,8 @@ async def ws_logs(websocket: WebSocket):
         loop.call_soon_threadsafe(queue.put_nowait, {"task_id": task_id, "entry": entry})
 
     manager.on_log(_on_log)
+    # 记录活跃 WS 客户端
+    _ws_clients.add(websocket)
     try:
         while True:
             try:
@@ -330,6 +370,7 @@ async def ws_logs(websocket: WebSocket):
         pass
     finally:
         stopped["flag"] = True
+        _ws_clients.discard(websocket)
 
 
 if __name__ == "__main__":

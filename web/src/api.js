@@ -25,6 +25,7 @@ export const api = {
   workspace: () => getJson('/api/workspace'),
   graph: () => getJson('/api/graph'),
   topology: () => getJson('/api/topology'),
+  systemStats: () => getJson('/api/system/stats'),
   taskLogs: (id, tail = 300, node, level) => {
     const q = new URLSearchParams({ tail: String(tail) })
     if (node) q.set('node', node)
