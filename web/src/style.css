@@ -815,6 +815,7 @@ a { color: var(--accent); text-decoration: none; }
   border: 1px solid var(--border-soft);
   background: var(--bg3); transition: all var(--t-fast);
   margin-bottom: 6px;
+  min-width: 0;  /* 允许 flex 子项收缩到 ellipsis */
 }
 .fn-item:hover {
   border-color: var(--border-strong); background: var(--bg4);
@@ -824,7 +825,25 @@ a { color: var(--accent); text-decoration: none; }
   border-color: var(--accent); background: var(--accent-soft);
   box-shadow: 0 0 0 1px var(--accent), 0 0 16px var(--accent-glow);
 }
-.fn-name { font-size: 13.5px; font-weight: 500; letter-spacing: -0.01em; flex: 1; }
+/* 禁用项：淡化 + 不响应 hover + 不可点 */
+.fn-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: transparent;
+  border-style: dashed;
+}
+.fn-item.disabled:hover {
+  transform: none;  /* 禁用项不响应 hover 位移 */
+  background: var(--bg3);
+  border-color: var(--border-soft);  /* 禁用项不响应 hover 边框增强 */
+  box-shadow: 0 0 0 1px var(--red), 0 0 12px rgba(255, 92, 92, 0.18);  /* 红色微光提示 */
+}
+.fn-name {
+  font-size: 13.5px; font-weight: 500; letter-spacing: -0.01em;
+  flex: 1; min-width: 0;  /* 配合 ellipsis */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: inherit;
+}
 
 .ws-item { display: flex; align-items: center; gap: 6px; border-radius: var(--r-md); padding: 2px; }
 .ws-item.active .btn { border-color: var(--accent); background: var(--accent-soft); }

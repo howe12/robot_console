@@ -68,6 +68,16 @@ function defaultVals(task) {
   for (const c of task.choices || []) o[c.key] = c.default
   return o
 }
+// 智能提取禁用原因：优先 desc 中的「已禁用」「未启用」等关键短语
+function disabledReason(t) {
+  if (t.enabled !== false) return ''
+  const desc = t.desc || ''
+  // 1. 优先从 desc 中提取「（xxx 已禁用）」或「（xxx 未启用）」结构
+  const m = desc.match(/[（(]([^）)]*?(已禁用|未启用|不存在|缺失|不可用)[^）)]*)[）)]/)
+  if (m) return m[1].trim()
+  // 2. 降级到「根据描述：xxx」
+  return `根据描述：${desc.slice(0, 60)}`
+}
 function pickTask(t) {
   selected.value = t
   selectedWs.value = null
@@ -180,14 +190,18 @@ const otherRunningId = computed(() => {
         <!-- 精选任务列表 -->
         <div v-if="view === 'curated'">
           <div v-for="t in tasks" :key="t.id"
-            class="fn-item" :class="{ active: selected?.id === t.id && !selectedWs }"
-            @click="pickTask(t)">
-            <span v-if="t.enabled === false" class="tag red">禁用</span>
-            <span class="fn-name">{{ t.name }}</span>
+            class="fn-item" :class="{
+              active: selected?.id === t.id && !selectedWs,
+              disabled: t.enabled === false
+            }"
+            :title="t.enabled === false ? '⚠ 禁用：' + disabledReason(t) : t.desc"
+            @click="t.enabled !== false && pickTask(t)">
+            <span v-if="t.enabled === false" class="tag red" title="已禁用">禁用</span>
+            <span class="fn-name" :title="t.name">{{ t.name }}</span>
             <span class="tag">{{ t.menu ?? '—' }}</span>
             <button class="btn sm ghost" title="查看 launch 文件"
-              @click.stop="openLaunchSource(t.launch_pkg || t.package, t.launch_file)"
-              v-if="t.launch_file"><Icon name="file" size="sm" /></button>
+              v-if="t.launch_file && t.enabled !== false"
+              @click.stop="openLaunchSource(t.launch_pkg || t.package, t.launch_file)"><Icon name="file" size="sm" /></button>
           </div>
         </div>
 
