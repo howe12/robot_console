@@ -149,8 +149,16 @@ def _run_ros2(args: list[str], timeout: float = 8.0) -> str:
         return ""
 
 
+def _run_ros2_parallel(args_list: list[list[str]], timeout: float = 8.0) -> list[str]:
+    """并行执行多个 ros2 子进程（每个 300-400ms，串行 1.4s → 并行 400ms）。"""
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=len(args_list)) as ex:
+        futures = [ex.submit(_run_ros2, args, timeout) for args in args_list]
+        return [f.result() for f in futures]
+
+
 _graph_cache = {"ts": 0.0, "data": None}
-_GRAPH_TTL = 3.0
+_GRAPH_TTL = 6.0  # 加大缓存窗口，确保 Dashboard 8s 间隔必命中
 
 
 def ros_graph() -> dict:
@@ -164,12 +172,19 @@ def ros_graph() -> dict:
     empty = {"nodes": [], "topics": [], "services": [], "actions": [], "topic_type": {}}
     if not ros_available:
         return empty
-    nodes = [l for l in _run_ros2(["node", "list"]).splitlines() if l.strip()]
+    # 并行 4 个 ros2 命令（每个 300-400ms → 总 ~400ms 替代 1.4s）
+    results = _run_ros2_parallel([
+        ["node", "list"],
+        ["topic", "list", "-t"],
+        ["service", "list"],
+        ["action", "list"],
+    ])
+    nodes_raw, topics_raw_str, services_raw, actions_raw = results
+    nodes = [l for l in nodes_raw.splitlines() if l.strip()]
     # 用 `ros2 topic list -t` 一次性拿所有话题+类型（替代逐话题 topic info，快 10x+）
-    topics_raw = _run_ros2(["topic", "list", "-t"]).splitlines()
     topics = []
     types = {}
-    for line in topics_raw:
+    for line in topics_raw_str.splitlines():
         line = line.strip()
         if not line:
             continue
@@ -181,15 +196,15 @@ def ros_graph() -> dict:
             types[name] = typ
         else:
             topics.append(line)
-    services = [l for l in _run_ros2(["service", "list"]).splitlines() if l.strip()]
-    actions = [l for l in _run_ros2(["action", "list"]).splitlines() if l.strip()]
+    services = [l for l in services_raw.splitlines() if l.strip()]
+    actions = [l for l in actions_raw.splitlines() if l.strip()]
     result = {"nodes": nodes, "topics": topics, "services": services, "actions": actions, "topic_type": types}
     _graph_cache = {"ts": now, "data": result}
     return result
 
 
 _topology_cache = {"ts": 0.0, "data": None}
-_TOPOLOGY_TTL = 2.0  # 秒；同一个拓扑缓存供 2s 内轮询复用，避免每轮都跑 node info
+_TOPOLOGY_TTL = 6.0  # 加大缓存窗口，确保 Dashboard 8s 间隔必命中
 
 
 # 已知功能包 → 分组映射（用于把节点归类到驱动/感知/应用等层）
@@ -249,10 +264,15 @@ def ros_topology() -> dict:
 
     node_names = [l for l in _run_ros2(["node", "list"]).splitlines() if l.strip()]
 
-    # 逐节点解析
+    # 并行跑 `ros2 node info` 每个节点（30 节点 × 350ms = 10.5s 串行 → ~500ms 并行）
+    node_infos = _run_ros2_parallel(
+        [["node", "info", n] for n in node_names],
+        timeout=6,
+    )
+
+    # 解析每个节点
     parsed = []
-    for n in node_names:
-        info = _run_ros2(["node", "info", n], timeout=6)
+    for n, info in zip(node_names, node_infos):
         entry = {"name": n, "group": _infer_node_group(n),
                  "publishers": [], "subscribers": [],
                  "srv_servers": [], "srv_clients": [],

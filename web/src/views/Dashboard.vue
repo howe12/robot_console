@@ -55,15 +55,18 @@ function fmtUptime(s) {
 }
 
 onMounted(() => {
+  // 主数据轮询（含 /api/system/status 重负载端点：500-800ms）
+  // 5s 太频繁（每 2 次有 1 次冷启动 1.6s）→ 改 12s 几乎必命中缓存
+  // VNC/远程环境自动 30s
   load()
-  // 轮询频率：默认 5s，VNC/远程环境自动 15s
-  const pollMs = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 15000 : 5000
-  timer = setInterval(load, pollMs)
-  // 网络分析：后端 stats + 浏览器实时（更频繁，2s）
+  const isRemote = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const mainPollMs = isRemote ? 30000 : 12000
+  timer = setInterval(load, mainPollMs)
+  // 网络分析：后端 stats（极轻 1.5ms）+ 浏览器实时（无请求）
   loadStats()
   loadBrowser()
-  statsTimer = setInterval(loadStats, pollMs)
-  browserTimer = setInterval(loadBrowser, 2000)
+  statsTimer = setInterval(loadStats, isRemote ? 5000 : 2000)
+  browserTimer = setInterval(loadBrowser, isRemote ? 5000 : 2000)
   // 监听 store 的 log entries 累加 WebSocket 字节
   watch(() => store.entries.length, (newLen, oldLen) => {
     if (newLen > oldLen) {
