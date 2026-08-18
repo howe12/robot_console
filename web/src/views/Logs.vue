@@ -233,7 +233,14 @@ onMounted(() => {
           <span class="muted" style="font-size:12px;font-family:var(--font-mono)">{{ visible.length }} 条</span>
         </div>
         <div ref="scrollBox" class="terminal" style="height:calc(100vh - 360px);min-height:380px">
-          <div v-if="!visible.length" style="color:var(--muted);padding:40px 0;text-align:center">
+          <template v-if="loadingHist && !visible.length">
+            <div v-for="i in 8" :key="'skel'+i" class="log-line" style="pointer-events:none">
+              <div class="skeleton text" style="width:48px; height:12px"></div>
+              <div class="skeleton text" style="width:120px; height:12px"></div>
+              <div class="skeleton text" :style="`width:${30 + (i * 7) % 40}%; height:12px`"></div>
+            </div>
+          </template>
+          <div v-else-if="!visible.length" style="color:var(--muted);padding:40px 0;text-align:center">
             暂无日志（启动任务后实时输出）
           </div>
           <template v-for="e in visible" :key="e.seq">

@@ -84,6 +84,7 @@ function startFoxglove() { api.startTask('foxglove', {}).then(() => checkFoxglov
 function stopFoxglove() { api.stopTask('foxglove').then(() => checkFoxglove()) }
 
 const sysDevices = ref({ camera: null, base: null, lidar: null, arm: null })
+const loading = ref(true)
 async function refreshDevices() {
   try {
     const s = await api.systemStatus()
@@ -102,12 +103,19 @@ async function startBringup() {
 }
 
 let statusTimer = null
+async function initAll() {
+  await Promise.all([
+    new Promise(r => { checkFoxglove(); r(); }),
+    refreshDevices(),
+  ])
+  loading.value = false
+}
 onMounted(() => {
   startCam()
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
   checkFoxglove()
-  refreshDevices()
+  refreshDevices().then(() => loading.value = false)
   statusTimer = setInterval(() => { checkFoxglove(); refreshDevices() }, 4000)
 })
 onUnmounted(() => {
@@ -158,6 +166,31 @@ onUnmounted(() => {
 
     <!-- 主内容区 -->
     <div>
+      <!-- 加载中：骨架屏 -->
+      <template v-if="loading">
+        <div class="hero">
+          <div class="hero-grid">
+            <div class="hero-title">
+              <h2><Icon name="visual" size="xl" class="hero-icon" /> 可视化控制</h2>
+              <div class="skeleton text" style="width:60%; height:14px; margin-top:8px"></div>
+            </div>
+            <div class="hero-actions">
+              <div class="skeleton text" style="width:120px; height:32px; border-radius:16px"></div>
+            </div>
+          </div>
+        </div>
+        <div class="grid grid-2" style="margin-top:8px">
+          <div class="card glow"><div class="skeleton text" style="width:30%; height:14px; margin-bottom:12px"></div><div class="skeleton block" style="height:280px"></div></div>
+          <div class="card glow"><div class="skeleton text" style="width:30%; height:14px; margin-bottom:12px"></div>
+            <div style="display:flex;gap:6px;margin-bottom:16px"><div class="skeleton-chip" v-for="i in 3" :key="i"></div></div>
+            <div class="skeleton block" style="height:140px; border-radius:36px"></div>
+          </div>
+        </div>
+        <div class="card glow" style="margin-top:16px"><div class="skeleton text" style="width:40%; height:14px; margin-bottom:12px"></div><div class="skeleton block" style="height:300px"></div></div>
+      </template>
+
+      <!-- 实际内容 -->
+      <template v-else>
       <!-- Hero -->
       <div class="hero">
         <div class="hero-grid">
@@ -246,6 +279,7 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
+      </template>
     </div>
   </div>
 </template>

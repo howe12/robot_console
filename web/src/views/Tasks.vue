@@ -13,6 +13,7 @@ const tasks = ref([])
 const workspace = ref(null)
 const running = reactive([])
 const msg = ref('')
+const loading = ref(true)
 const selected = ref(null)
 const selectedWs = ref(null)
 const pn = ref(null)
@@ -39,6 +40,7 @@ async function openLaunchSource(packageName, launchName) {
 function closeModal() { modal.value = null; modalErr.value = '' }
 
 async function loadAll() {
+  loading.value = true
   try {
     const t = await api.tasks()
     tasks.value = t.tasks || []
@@ -50,6 +52,7 @@ async function loadAll() {
     workspace.value = w
   } catch (e) {}
   refreshRunning()
+  loading.value = false
 }
 function refreshRunning() {
   api.status().then(s => {
@@ -225,7 +228,35 @@ const otherRunningId = computed(() => {
         </div>
       </div>
 
+      <!-- 加载中：骨架屏 -->
+      <template v-if="loading">
+        <!-- 侧栏骨架 -->
+        <div class="card">
+          <div class="skeleton text" style="width: 50%; margin-bottom: 14px"></div>
+          <div v-for="i in 8" :key="'s'+i" class="fn-item" style="pointer-events:none">
+            <div class="skeleton text" style="flex:1; height:14px"></div>
+            <div class="skeleton text" style="width:24px; height:14px"></div>
+          </div>
+        </div>
+        <!-- 详情骨架 -->
+        <div class="card glow" style="margin-top:16px">
+          <div class="skeleton text" style="width:40%; height:18px; margin-bottom:12px"></div>
+          <div class="skeleton text" style="width:60%; margin-bottom:20px"></div>
+          <div class="grid grid-2" style="gap:14px">
+            <div>
+              <div class="skeleton block" style="height:120px"></div>
+            </div>
+            <div>
+              <div class="skeleton text" style="width:35%; margin-bottom:8px"></div>
+              <div class="skeleton text" style="width:55%; margin-bottom:8px"></div>
+              <div class="skeleton text" style="width:45%"></div>
+            </div>
+          </div>
+        </div>
+      </template>
+
       <!-- 主内容：选中时显示详情，否则显示 Hero + 提示 -->
+      <template v-else>
       <div v-if="!selected && !selectedWs" class="empty">
         <div style="font-size:48px;opacity:.3"><Icon name="tasks" size="xl" /></div>
         <div style="margin-top:12px">从左侧选择一个功能查看详情</div>
@@ -334,6 +365,7 @@ const otherRunningId = computed(() => {
           </div>
         </div>
       </div>
+      </template>
     </div>
 
     <!-- launch 源码弹窗 -->
