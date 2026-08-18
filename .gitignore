@@ -24,4 +24,4 @@ web/dist/
 
 # 环境变量 / 本地配置
 .env
-.env.local
+.env.localdocs/
