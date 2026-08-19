@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Robot Console
+GenericName=Robot Console Web UI
+Comment=ROS2 机器人 Web 控制台（FastAPI + Vue3）
+Exec=/home/spark/spark_console/scripts/launch-robot-console.sh
+Icon=/home/spark/spark_console/icons/robot-console.png
+Terminal=true
+StartupNotify=false
+Categories=Development;Robotics;Education;
+Keywords=ROS2;robot;dashboard;web;
+Name[zh_CN]=机器人控制台
+Comment[zh_CN]=SPARK ROS2 机器人 Web 控制台
