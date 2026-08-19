@@ -30,4 +30,22 @@ if ss -tlnp 2>/dev/null | grep -q ":8080 "; then
 fi
 
 echo "[run.sh] 启动后端 http://0.0.0.0:8080"
+
+# 显示局域网 IP（用于手机/平板/另一台电脑直接访问）
+# 提取本机所有非 loopback、非 link-local 的 IPv4 地址
+LAN_IPS=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.' | grep -v '^127\.' | grep -v '^169\.254\.' | sort -u)
+if [ -n "$LAN_IPS" ]; then
+    echo ""
+    echo "============================================================"
+    echo "  ✓ 服务已启动，局域网内可用以下地址访问："
+    echo ""
+    while IFS= read -r ip; do
+        printf "    ➜  http://%s:8080/\n" "$ip"
+    done <<< "$LAN_IPS"
+    echo ""
+    echo "  本机访问: http://127.0.0.1:8080/"
+    echo "============================================================"
+    echo ""
+fi
+
 exec uvicorn main:app --host 0.0.0.0 --port 8080 "$@"
