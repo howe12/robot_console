@@ -163,6 +163,11 @@ const devices = computed(() => data.value?.devices ?? {})
 const sensors = computed(() => data.value?.sensors ?? {})
 const rosGraph = computed(() => data.value?.ros_graph ?? { nodes: [], topics: [] })
 const software = computed(() => data.value?.software ?? {})
+const workspaceBaseName = computed(() => {
+  const ws = software.value?.workspace || ''
+  if (!ws) return '—'
+  return ws.split('/').filter(Boolean).pop() || ws
+})
 
 // 网络分析：后端 stats + 浏览器 stats
 ;
@@ -189,7 +194,28 @@ function cpuColor(p) {
         </button>
       </div>
       <div class="sidebar-content">
-        <div class="muted" style="font-size:11px;letter-spacing:0.06em;margin-bottom:6px">ROS 发行版</div>
+        <!-- 机器人 + 工作空间（最高优先级 — 一眼看出当前连的是哪台机器 / 哪个工作空间） -->
+        <div class="muted" style="font-size:11px;letter-spacing:0.06em;margin-bottom:6px">机器人</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:6px">
+          <span style="width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)"></span>
+          {{ software.hostname || '—' }}
+        </div>
+        <div style="font-size:11px;color:var(--muted);font-family:var(--font-mono);margin-bottom:14px">{{ software.os_description }}</div>
+
+        <div class="muted" style="font-size:11px;letter-spacing:0.06em;margin-bottom:6px">
+          ROS 工作空间
+          <span v-if="software.workspace" class="muted" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;margin-left:6px">点击展开</span>
+        </div>
+        <details class="ws-path">
+          <summary style="font-size:13px;font-family:var(--font-mono);cursor:pointer;list-style:none">
+            📁 {{ workspaceBaseName }}
+          </summary>
+          <div style="font-size:10px;font-family:var(--font-mono);color:var(--muted);margin-top:6px;padding:6px;background:var(--bg2);border-radius:6px;word-break:break-all;line-height:1.5">
+            {{ software.workspace || '—' }}
+          </div>
+        </details>
+
+        <div class="muted" style="font-size:11px;letter-spacing:0.06em;margin-bottom:6px;margin-top:14px">ROS 发行版</div>
         <div style="font-size:14px;font-weight:600;margin-bottom:14px">{{ software.ros_distro || '-' }}</div>
 
         <div class="muted" style="font-size:11px;letter-spacing:0.06em;margin-bottom:6px">ROS_DOMAIN_ID</div>
