@@ -194,7 +194,76 @@ function cpuColor(p) {
   if (p < 30) return 'color: var(--green)'
   if (p < 70) return 'color: var(--yellow)'
   return 'color: var(--red)'
-};
+}
+
+// 每核 CPU 负载条颜色
+function cpuBarColor(p) {
+  if (p === null || p === undefined) return ''
+  if (p < 30) return 'background: var(--green); color: #0a0a0a'
+  if (p < 70) return 'background: var(--yellow); color: #0a0a0a'
+  return 'background: var(--red); color: #fff'
+}
+
+// CPU 描述："4 核 @ 2.4 GHz" / "8 核" / ""
+const cpuInfo = computed(() => {
+  const s = data.value?.system || {}
+  const parts = []
+  if (s.cpu_count) parts.push(`${s.cpu_count} 核`)
+  if (s.cpu_freq_mhz) {
+    parts.push(s.cpu_freq_mhz >= 1000
+      ? `${(s.cpu_freq_mhz/1000).toFixed(2)} GHz`
+      : `${s.cpu_freq_mhz} MHz`)
+  }
+  return parts.join(' @ ')
+})
+const cpuTooltip = computed(() => {
+  const s = data.value?.system || {}
+  const lines = []
+  if (s.cpu_count) lines.push(`CPU: ${s.cpu_count} 核`)
+  if (s.cpu_freq_mhz) lines.push(`频率: ${s.cpu_freq_mhz} MHz`)
+  if (s.temp) lines.push(`温度: ${s.temp.toFixed(1)}°C`)
+  if (s.load && s.load.length === 3) {
+    lines.push(`负载: ${s.load.map(x => x.toFixed(2)).join(' / ')}`)
+  }
+  return lines.join('\n') || ''
+})
+
+// 内存描述："7.4 GB / 16 GB" + swap（如果有）
+const memInfo = computed(() => {
+  if (!mem.total) return ''
+  return `${fmtBytes(mem.used)} / ${fmtBytes(mem.total)}`
+})
+const memTooltip = computed(() => {
+  const s = data.value?.system || {}
+  const lines = []
+  if (mem.used && mem.total) {
+    lines.push(`已用: ${fmtBytes(mem.used)} / ${fmtBytes(mem.total)}`)
+  }
+  if (s.load && s.load.length === 3) {
+    lines.push(`系统负载: ${s.load.map(x => x.toFixed(2)).join(' / ')} (1/5/15 分钟)`)
+  }
+  return lines.join('\n') || ''
+})
+
+// 磁盘 IO 累计字节
+const diskIoRead = computed(() => data.value?.system?.disk_io?.read_bytes || 0)
+const diskIoWrite = computed(() => data.value?.system?.disk_io?.write_bytes || 0)
+
+const diskInfo = computed(() => {
+  if (!disk.total) return ''
+  return `${fmtBytes(disk.used)} / ${fmtBytes(disk.total)}`
+})
+const diskTooltip = computed(() => {
+  const s = data.value?.system || {}
+  const lines = []
+  if (disk.used && disk.total) {
+    lines.push(`已用: ${fmtBytes(disk.used)} / ${fmtBytes(disk.total)}`)
+    lines.push(`剩余: ${fmtBytes(disk.free)}`)
+  }
+  if (s.disk_io?.read_bytes) lines.push(`累计读: ${fmtBytes(s.disk_io.read_bytes)}`)
+  if (s.disk_io?.write_bytes) lines.push(`累计写: ${fmtBytes(s.disk_io.write_bytes)}`)
+  return lines.join('\n') || ''
+})
 </script>
 
 <template>
@@ -295,28 +364,59 @@ function cpuColor(p) {
       <template v-else-if="data">
         <!-- 指标卡（视差） -->
         <div class="metric-grid">
-          <div class="card metric">
-            <div class="label"><Icon name="chip" size="sm" class="label-icon" /> CPU</div>
+          <div class="card metric" :title="cpuTooltip" data-tooltip="click">
+            <div class="label"><Icon name="chip" size="sm" class="label-icon" /> CPU
+              <span class="muted" style="font-weight:400;margin-left:6px;font-size:10px">{{ cpuInfo }}</span>
+            </div>
             <div class="val" :class="{ flash: cpu !== null }">
               {{ cpu !== null ? cpu.toFixed(1) : '-' }}<span class="unit">%</span>
             </div>
             <div class="bar"><i :style="{ width: (cpu || 0) + '%' }"></i></div>
+            <details v-if="data?.system?.cpu_per_core?.length" class="metric-detail">
+              <summary>每核负载</summary>
+              <div class="cpu-cores">
+                  <div v-for="(c, i) in data.system.cpu_per_core" :key="i" class="cpu-core-cell" :title="'Core ' + i + ': ' + c.toFixed(1) + '%'">
+                      <span class="cpu-core-val" :style="cpuBarColor(c)">{{ c.toFixed(0) }}</span>
+                      <span class="cpu-core-bar"><i :style="{ width: c + '%' }"></i></span>
+                      <span class="cpu-core-lbl">C{{ i }}</span>
+                  </div>
+                </div>
+            </details>
           </div>
-          <div class="card metric">
-            <div class="label"><Icon name="memory" size="sm" class="label-icon" /> 内存</div>
+          <div class="card metric" :title="memTooltip">
+            <div class="label"><Icon name="memory" size="sm" class="label-icon" /> 内存
+              <span class="muted" style="font-weight:400;margin-left:6px;font-size:10px">{{ memInfo }}</span>
+            </div>
             <div class="val">
               {{ mem.percent !== undefined ? mem.percent.toFixed(0) : '-' }}<span class="unit">%</span>
             </div>
             <div class="muted sub" style="margin-top:8px">{{ fmtBytes(mem.used) }} / {{ fmtBytes(mem.total) }}</div>
             <div class="bar"><i :style="{ width: (mem.percent || 0) + '%' }"></i></div>
+            <details v-if="data?.system?.load?.length" class="metric-detail">
+              <summary>系统负载</summary>
+              <div style="font-size:11px;font-family:var(--font-mono);color:var(--text-2);padding:4px 0;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center">
+                <div><span class="muted" style="font-size:10px">1 分钟</span><br><b>{{ data.system.load[0]?.toFixed(2) }}</b></div>
+                <div><span class="muted" style="font-size:10px">5 分钟</span><br><b>{{ data.system.load[1]?.toFixed(2) }}</b></div>
+                <div><span class="muted" style="font-size:10px">15 分钟</span><br><b>{{ data.system.load[2]?.toFixed(2) }}</b></div>
+              </div>
+            </details>
           </div>
-          <div class="card metric">
-            <div class="label"><Icon name="database" size="sm" class="label-icon" /> 磁盘</div>
+          <div class="card metric" :title="diskTooltip">
+            <div class="label"><Icon name="database" size="sm" class="label-icon" /> 磁盘
+              <span class="muted" style="font-weight:400;margin-left:6px;font-size:10px">{{ diskInfo }}</span>
+            </div>
             <div class="val">
               {{ disk.percent !== undefined ? disk.percent.toFixed(0) : '-' }}<span class="unit">%</span>
             </div>
-            <div class="muted sub" style="margin-top:8px">{{ fmtBytes(disk.free) }} 可用</div>
+            <div class="muted sub" style="margin-top:8px">{{ fmtBytes(disk.free) }} 可用 / {{ fmtBytes(disk.total) }}</div>
             <div class="bar"><i :style="{ width: (disk.percent || 0) + '%' }"></i></div>
+            <details v-if="diskIoRead || diskIoWrite" class="metric-detail">
+              <summary>磁盘 IO</summary>
+              <div style="font-size:11px;color:var(--text-2);padding:4px 0">
+                <span class="muted">读 </span><b>{{ fmtBytes(diskIoRead) }}</b>
+                &nbsp;<span class="muted">写 </span><b>{{ fmtBytes(diskIoWrite) }}</b>
+              </div>
+            </details>
           </div>
           <div class="card metric">
             <div class="label"><Icon name="bolt" size="sm" class="label-icon" /> 运行时长</div>

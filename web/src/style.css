@@ -497,6 +497,69 @@ a { color: var(--accent); text-decoration: none; }
 }
 .commit-row:last-child { border-bottom: none; }
 .commit-row:hover { background: var(--bg3); }
+/* 指标卡折叠面板（CPU/内存/磁盘详情） */
+.metric-detail {
+  margin-top: 10px;
+  border-top: 1px dashed var(--border);
+  padding-top: 8px;
+}
+.metric-detail > summary {
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  list-style: none;
+  user-select: none;
+  padding: 2px 0;
+  transition: color var(--t-fast);
+}
+.metric-detail > summary::-webkit-details-marker { display: none; }
+.metric-detail > summary::before {
+  content: '▸ '; display: inline-block; transition: transform var(--t-fast);
+}
+.metric-detail[open] > summary::before { transform: rotate(90deg); }
+.metric-detail > summary:hover { color: var(--text); }
+/* 每核 CPU 负载网格 */
+.cpu-cores {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(46px, 1fr));
+  gap: 4px;
+  margin-top: 6px;
+}
+.cpu-core-cell {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 4px 2px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 10px;
+}
+.cpu-core-val {
+  font-family: var(--font-mono); font-weight: 600;
+  padding: 1px 4px; border-radius: 3px;
+  margin-bottom: 4px;
+  min-width: 22px; text-align: center;
+}
+.cpu-core-bar {
+  width: 100%; height: 4px; background: var(--bg3); border-radius: 2px;
+  overflow: hidden; margin-bottom: 2px;
+}
+.cpu-core-bar > i {
+  display: block; height: 100%;
+  background: linear-gradient(90deg, var(--green), var(--yellow), var(--red));
+}
+.cpu-core-lbl {
+  font-family: var(--font-mono); font-size: 9px; color: var(--muted);
+  letter-spacing: 0;
+}
+/* 指标卡 hover 提升 */
+.card.metric {
+  transition: transform var(--t-base), border-color var(--t-base);
+}
+.card.metric:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-soft);
+}
 .metric {
   padding: 6px 0;
   transition: transform var(--t-base);

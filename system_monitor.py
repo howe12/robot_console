@@ -55,7 +55,12 @@ def _first_line(fields: list[str]) -> str:
 
 def system_metrics() -> dict:
     """采集一次系统资源快照。"""
-    out: dict = {"uptime": None, "cpu_percent": None, "mem": {}, "disk": {}, "net": {}, "load": [], "temp": None, "hostname": None}
+    out: dict = {
+        "uptime": None, "cpu_percent": None, "cpu_count": None, "cpu_freq_mhz": None,
+        "cpu_per_core": [], "load": [],
+        "mem": {}, "disk": {}, "disk_io": {}, "net": {},
+        "temp": None, "hostname": None, "kernel": "",
+    }
     out["hostname"] = os.uname().nodename if hasattr(os, "uname") else "unknown"
     out["kernel"] = f"{os.uname().release} {os.uname().machine}" if hasattr(os, "uname") else ""
 
@@ -68,10 +73,30 @@ def system_metrics() -> dict:
 
     if HAVE_PSUTIL:
         out["cpu_percent"] = psutil.cpu_percent(interval=None)
+        # CPU 详情（核数 + 频率 + 每核负载）
+        try:
+            out["cpu_count"] = psutil.cpu_count(logical=True)
+        except Exception:
+            out["cpu_count"] = None
+        try:
+            f = psutil.cpu_freq()
+            if f and f.current:
+                out["cpu_freq_mhz"] = round(f.current)
+        except Exception:
+            pass
+        try:
+            out["cpu_per_core"] = psutil.cpu_percent(interval=None, percpu=True)
+        except Exception:
+            pass
         vm = psutil.virtual_memory()
         out["mem"] = {"total": vm.total, "used": vm.used, "free": vm.available, "percent": vm.percent}
         du = psutil.disk_usage("/")
         out["disk"] = {"total": du.total, "used": du.used, "free": du.free, "percent": du.percent}
+        try:
+            dio = psutil.disk_io_counters()
+            out["disk_io"] = {"read_bytes": dio.read_bytes, "write_bytes": dio.write_bytes}
+        except Exception:
+            pass
         try:
             nio = psutil.net_io_counters()
             out["net"] = {"sent_bytes": nio.bytes_sent, "recv_bytes": nio.bytes_recv}
