@@ -22,6 +22,7 @@ try:
     from geometry_msgs.msg import Twist
     from cv_bridge import CvBridge
     import cv2
+    import numpy as np
     ros_available = True
 except Exception as _e:
     ros_import_error = str(_e)
@@ -32,6 +33,36 @@ DEFAULT_TOPIC = "camera/color/image_raw"
 DEFAULT_WIDTH = 640
 DEFAULT_QUALITY = 80
 DEFAULT_FPS = 15
+
+
+_shared_node = None
+_shared_executor = None
+_shared_spin_thread = None
+_node_lock = threading.Lock()
+
+
+def _get_shared_node():
+    """全局共享 rclpy 节点（所有 StreamContext 复用，避免每个流创建独立 node 的 rclpy context 冲突）"""
+    global _shared_node, _shared_executor, _shared_spin_thread
+    with _node_lock:
+        if _shared_node is not None:
+            return _shared_node
+        if not rclpy.ok():
+            rclpy.init()
+        _shared_node = rclpy.create_node("spark_console_shared")
+        _shared_executor = rclpy.executors.SingleThreadedExecutor()
+        _shared_executor.add_node(_shared_node)
+        _shared_spin_thread = threading.Thread(target=_shared_spin_loop, daemon=True)
+        _shared_spin_thread.start()
+        return _shared_node
+
+
+def _shared_spin_loop():
+    while rclpy.ok() and _shared_node is not None:
+        try:
+            _shared_executor.spin_once(timeout_sec=0.05)
+        except Exception:
+            break
 
 
 class _TwistPublisher:
@@ -99,54 +130,101 @@ class StreamContext:
     def start(self):
         if not ros_available: return False
         try:
-            # rclpy.init() 整个进程只能调一次；先尝试，已 init 就跳过
-            if not rclpy.ok():
-                rclpy.init()
-            self._node = Node(f"spark_cam_{self._last_seq}_{self.topic.replace('/','_')}")
+            self._node = _get_shared_node()
             self._sub = self._node.create_subscription(
                 Image, self.topic, self._on_image,
                 QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT))
-            self._executor = SingleThreadedExecutor()
-            self._executor.add_node(self._node)
-            self._spin_thread = threading.Thread(target=self._spin, daemon=True)
-            self._spin_thread.start()
             print(f"[stream] 启动: {self.topic} {self.width}p {self.fps}fps q{self.quality}")
             return True
         except Exception as e:
             print(f"[stream] 启动失败: {e}")
             return False
 
-    def _spin(self):
-        while rclpy.ok() and self._node is not None:
-            try: self._executor.spin_once(timeout_sec=0.05)
-            except: break
-
     def _on_image(self, msg):
         now = time.monotonic()
         if now - self._last_enc < 1.0 / self.fps: return
         try:
-            bgr = self._bridge.imgmsg_to_cv2(msg, "bgr8")
-            h, w = bgr.shape[:2]
-            if w > self.width:
-                nh = int(h * self.width / w)
+            w, h = msg.width, msg.height
+            # 用 numpy 从 raw bytes 解码（cv_bridge 不支持 16UC1/32FC1）
+            # ROS image data 是 row-major，msg.data 是 bytes
+            dtype_map = {
+                "rgb8": (np.uint8, 3), "bgr8": (np.uint8, 3),
+                "rgba8": (np.uint8, 4), "bgra8": (np.uint8, 4),
+                "mono8": (np.uint8, 1), "8uc1": (np.uint8, 1),
+                "mono16": (np.uint16, 1), "16uc1": (np.uint16, 1),
+                "32fc1": (np.float32, 1),
+            }
+            enc = msg.encoding.lower()
+            if enc not in dtype_map:
+                # 只打印一次不重复刷屏
+                _logged = getattr(StreamContext, '_logged_encs', set())
+                if enc not in _logged:
+                    _logged.add(enc)
+                    StreamContext._logged_encs = _logged
+                    print(f"[on_image] unsupported encoding: {enc}", flush=True)
+                return
+            dtype, ch = dtype_map[enc]
+            arr = np.frombuffer(msg.data, dtype=dtype).reshape((h, w, ch)) if ch > 1 else np.frombuffer(msg.data, dtype=dtype).reshape((h, w))
+            # 转成 bgr 图像用于 JPEG 编码
+            if enc in ("bgr8",):
+                bgr = arr
+            elif enc in ("rgb8",):
+                bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+            elif enc in ("rgba8",):
+                bgr = cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR)
+            elif enc in ("bgra8",):
+                bgr = cv2.cvtColor(arr, cv2.COLOR_BGRA2BGR)
+            elif enc in ("mono8", "8uc1", "mono16"):
+                # 8/16 位灰度：归一化到 0-255
+                if arr.dtype != np.uint8:
+                    arr = (arr / 256).astype(np.uint8)
+                bgr = cv2.cvtColor(arr, cv2.COLOR_GRAY2BGR)
+            elif enc == "16uc1":
+                # 深度图：用 99 百分位做 max，0 映射到白色（无效区）
+                valid = arr[arr > 0]
+                if valid.size == 0:
+                    return  # 无有效数据
+                max_v = float(np.percentile(valid, 99)) or 1.0
+                gray = np.clip(arr.astype(np.float32) / max_v * 255, 0, 255).astype(np.uint8)
+                gray[arr == 0] = 255
+                bgr = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+            elif enc == "32fc1":
+                valid = arr[(arr > 0) & np.isfinite(arr)]
+                if valid.size == 0:
+                    return
+                max_v = float(np.percentile(valid, 99)) or 1.0
+                norm = np.clip(arr / max_v, 0, 1)
+                gray = (norm * 255).astype(np.uint8)
+                gray[~np.isfinite(arr) | (arr == 0)] = 255
+                bgr = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+            else:
+                return
+            h2, w2 = bgr.shape[:2]
+            if w2 > self.width:
+                nh = int(h2 * self.width / w2)
                 bgr = cv2.resize(bgr, (self.width, nh), interpolation=cv2.INTER_AREA)
             ok, jpg = cv2.imencode(".jpg", bgr, [int(cv2.IMWRITE_JPEG_QUALITY), self.quality])
             if ok:
                 self._last_enc = now
                 with self._lock:
                     self._latest = (jpg.tobytes(), time.time_ns())
-        except: pass
+        except Exception as e:
+            # 只打印第一次同类型错误，避免日志刷屏
+            _key = (self.topic, type(e).__name__)
+            _err = getattr(StreamContext, '_logged_errs', set())
+            if _key not in _err:
+                _err.add(_key)
+                StreamContext._logged_errs = _err
+                print(f"[on_image ERROR] {self.topic} enc={msg.encoding} {type(e).__name__}: {e}", flush=True)
 
     def latest_frame(self):
         with self._lock:
             return self._latest
 
     def stop(self):
-        node, self._node = self._node, None
-        if node is not None:
-            try: node.destroy_node()
-            except: pass
-        # 不 shutdown rclpy（可能有其他流在用）
+        # 共享 node 不 destroy，只是把 self._node 置空
+        self._node = None
+        # 不 shutdown rclpy
 
 
 def list_image_topics() -> list:
