@@ -482,6 +482,21 @@ a { color: var(--accent); text-decoration: none; }
   display: grid; gap: 16px;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
+.commit-list {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column;
+  background: var(--bg2);
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  overflow: hidden;
+}
+.commit-row {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  transition: background var(--t-fast);
+}
+.commit-row:last-child { border-bottom: none; }
+.commit-row:hover { background: var(--bg3); }
 .metric {
   padding: 6px 0;
   transition: transform var(--t-base);

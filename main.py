@@ -338,6 +338,19 @@ def _git_info() -> dict:
             info["ahead"] = int(right.strip())
         except Exception:
             pass
+    # 最近 N 个 commits（默认 5）
+    commits = []
+    raw = run('log', '-5', f'--pretty=format:{fmt}')
+    if raw:
+        for line in raw.split(chr(10)):
+            parts = line.split(SEP)
+            if len(parts) >= 6:
+                commits.append({
+                    "hash": parts[0], "short": parts[1],
+                    "author": parts[2], "email": parts[3],
+                    "date": parts[4], "subject": parts[5],
+                })
+    info["recent_commits"] = commits
     # 是否同步
     info["in_sync"] = (info["ahead"] == 0 and info["behind"] == 0 and info["uncommitted"] == 0)
     return info

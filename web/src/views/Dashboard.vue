@@ -39,7 +39,22 @@ function fmtUptime(s) {
   const d = Math.floor(s / 86400)
   const h = Math.floor(s % 86400 / 3600)
   const m = Math.floor(s % 3600 / 60)
-  return d > 0 ? `${d}天 ${h}时 ${m}分` : `${h}时 ${m}分`
+  return d > 0 ? `${d}天 ${h}时 ${m}分` : `${h}时 ${m}分`;
+// Git date 字符串 ("Wed Aug 19 14:35:27 2026 +0800") -> 相对时间
+}
+function formatRelative(gitDate) {
+  if (!gitDate) return ''
+  // git 格式 "Wed Aug 19 14:35:27 2026 +0800"
+  const d = new Date(gitDate)
+  if (isNaN(d)) return gitDate
+  const sec = (Date.now() - d.getTime()) / 1000
+  if (sec < 60) return '刚刚'
+  if (sec < 3600) return `${Math.floor(sec/60)} 分钟前`
+  if (sec < 86400) return `${Math.floor(sec/3600)} 小时前`
+  if (sec < 86400*7) return `${Math.floor(sec/86400)} 天前`
+  if (sec < 86400*30) return `${Math.floor(sec/(86400*7))} 周前`
+  if (sec < 86400*365) return `${Math.floor(sec/(86400*30))} 月前`
+  return `${Math.floor(sec/(86400*365))} 年前`
 };
 
 
@@ -532,6 +547,20 @@ function cpuColor(p) {
               </div>
             </div>
           </div>
+          <!-- 近期提交列表（最多 5 个） -->
+          <div v-if="gitInfo?.recent_commits?.length" style="margin-top:18px">
+            <div class="muted" style="font-size:11px;letter-spacing:0.06em;margin-bottom:8px">近 5 次提交</div>
+            <ul class="commit-list">
+              <li v-for="c in gitInfo.recent_commits" :key="c.hash" class="commit-row">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="font-family:var(--font-mono);font-size:11px;color:var(--accent);flex-shrink:0">{{ c.short }}</span>
+                  <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="c.subject">{{ c.subject }}</span>
+                  <span style="font-size:11px;color:var(--muted);flex-shrink:0;font-family:var(--font-mono)">{{ formatRelative(c.date) }}</span>
+                </div>
+              </li>
+            </ul>
+          </div>
+
           <div v-else class="muted" style="font-size:12px;padding:8px 0">
             {{ gitInfo ? '仓库信息加载失败' : '正在读取…' }}
           </div>
