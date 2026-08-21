@@ -21,9 +21,54 @@ const wsBytes = ref(0)          // 累计 WebSocket 接收字节
 const wsLastTick = ref(0)       // 上次记录时间
 const browserInfo = ref(null)   // 浏览器端实时数据
 let statsTimer = null
+let gitTimer = null
+const gitInfo = ref(null)
 let browserTimer = null
 
-async function load() {
+;
+const flashKey = ref(0)
+
+function fmtBytes(b) {
+  if (b == null) return '-'
+  const g = b / 1073741824
+  if (g >= 1) return g.toFixed(2) + ' GB'
+  return (b / 1048576).toFixed(0) + ' MB'
+};
+function fmtUptime(s) {
+  if (s == null) return '-'
+  const d = Math.floor(s / 86400)
+  const h = Math.floor(s % 86400 / 3600)
+  const m = Math.floor(s % 3600 / 60)
+  return d > 0 ? `${d}天 ${h}时 ${m}分` : `${h}时 ${m}分`
+};
+
+
+// 底盘传感器键名 → 中文（SparkBaseSensor.msg 字段）
+const SENSOR_LABEL = {
+  // 红外防撞（7 个）
+  ir_bumper_left: '红外防撞·左',
+  ir_bumper_right: '红外防撞·右',
+  ir_bumper_front: '红外防撞·前',
+  ir_bumper_front_left: '红外防撞·前左',
+  ir_bumper_front_right: '红外防撞·前右',
+  ir_bumper_back_left: '红外防撞·后左',
+  ir_bumper_back_right: '红外防撞·后右',
+  // 跌落（6 个）
+  cliff_left: '悬崖·左',
+  cliff_right: '悬崖·右',
+  cliff_front_left: '悬崖·前左',
+  cliff_front_right: '悬崖·前右',
+  cliff_back_left: '悬崖·后左',
+  cliff_back_right: '悬崖·后右',
+  // 轮组
+  wheel_drop_left: '轮抬起·左',
+  wheel_drop_right: '轮抬起·右',
+  wheel_over_current_left: '轮过流·左',
+  wheel_over_current_right: '轮过流·右',
+};
+function sensorLabel(k) { return SENSOR_LABEL[k] || k }
+
+const load = async () => {
   try {
     // 用轻量端点：30ms 替代 system/status 1.5s（ROS 图冷启动 1000ms+）
     // ROS 图节点/话题改在 TopologyView（只在用户进入 Logs 视图时拉）
@@ -51,48 +96,6 @@ async function load() {
   }
   loading.value = false
 }
-const flashKey = ref(0)
-
-function fmtBytes(b) {
-  if (b == null) return '-'
-  const g = b / 1073741824
-  if (g >= 1) return g.toFixed(2) + ' GB'
-  return (b / 1048576).toFixed(0) + ' MB'
-}
-function fmtUptime(s) {
-  if (s == null) return '-'
-  const d = Math.floor(s / 86400)
-  const h = Math.floor(s % 86400 / 3600)
-  const m = Math.floor(s % 3600 / 60)
-  return d > 0 ? `${d}天 ${h}时 ${m}分` : `${h}时 ${m}分`
-}
-
-
-// 底盘传感器键名 → 中文（SparkBaseSensor.msg 字段）
-const SENSOR_LABEL = {
-  // 红外防撞（7 个）
-  ir_bumper_left: '红外防撞·左',
-  ir_bumper_right: '红外防撞·右',
-  ir_bumper_front: '红外防撞·前',
-  ir_bumper_front_left: '红外防撞·前左',
-  ir_bumper_front_right: '红外防撞·前右',
-  ir_bumper_back_left: '红外防撞·后左',
-  ir_bumper_back_right: '红外防撞·后右',
-  // 跌落（6 个）
-  cliff_left: '悬崖·左',
-  cliff_right: '悬崖·右',
-  cliff_front_left: '悬崖·前左',
-  cliff_front_right: '悬崖·前右',
-  cliff_back_left: '悬崖·后左',
-  cliff_back_right: '悬崖·后右',
-  // 轮组
-  wheel_drop_left: '轮抬起·左',
-  wheel_drop_right: '轮抬起·右',
-  wheel_over_current_left: '轮过流·左',
-  wheel_over_current_right: '轮过流·右',
-}
-function sensorLabel(k) { return SENSOR_LABEL[k] || k }
-
 onMounted(() => {
   // 主数据轮询用轻量端点（/api/system/light，<30ms，无 ROS 图）
   // ROS 图节点/话题改在 TopologyView（仅 Logs 视图需要时拉取）
@@ -101,10 +104,38 @@ onMounted(() => {
   const mainPollMs = isRemote ? 12000 : 6000
   timer = setInterval(load, mainPollMs)
   // 网络分析：后端 stats（极轻 1.5ms）+ 浏览器实时（无请求）
-  loadStats()
-  loadBrowser()
-  statsTimer = setInterval(loadStats, isRemote ? 5000 : 2000)
-  browserTimer = setInterval(loadBrowser, isRemote ? 5000 : 2000)
+  // 直接 inline fetch 调用，避免 Vue compiler scope merging bug
+  ;(async () => { try { systemStats.value = await api.systemStats() } catch {} })()
+  ;(() => {
+    const mem = performance.memory ? {
+      used: (performance.memory.usedJSHeapSize / 1048576).toFixed(1),
+      total: (performance.memory.totalJSHeapSize / 1048576).toFixed(1)
+    } : null
+    browserInfo.value = {
+      jsHeapMb: mem,
+      dom: document.querySelectorAll('*').length,
+      svg: document.querySelectorAll('svg').length,
+      wsEntries: store.entries.length,
+      wsBytes: wsBytes.value
+    }
+  })()
+  ;(async () => { try { gitInfo.value = await api.gitInfo() } catch {} })()  // 初始拉一次
+  statsTimer = setInterval(async () => { try { systemStats.value = await api.systemStats() } catch {} }, isRemote ? 5000 : 2000)
+  browserTimer = setInterval(() => {
+    const mem = performance.memory ? {
+      used: (performance.memory.usedJSHeapSize / 1048576).toFixed(1),
+      total: (performance.memory.totalJSHeapSize / 1048576).toFixed(1)
+    } : null
+    browserInfo.value = {
+      jsHeapMb: mem,
+      dom: document.querySelectorAll('*').length,
+      svg: document.querySelectorAll('svg').length,
+      wsEntries: store.entries.length,
+      wsBytes: wsBytes.value
+    }
+  }, isRemote ? 5000 : 2000)
+  // 仓库同步信息轮询较慢（30s）
+  gitTimer = setInterval(async () => { try { gitInfo.value = await api.gitInfo() } catch {} }, 30000)
   // 监听 store 的 log entries 累加 WebSocket 字节
   watch(() => store.entries.length, (newLen, oldLen) => {
     if (newLen > oldLen) {
@@ -118,7 +149,7 @@ onMounted(() => {
 })
 onUnmounted(() => {
   clearInterval(timer)
-  clearInterval(statsTimer)
+  clearInterval(statsTimer); clearInterval(gitTimer)
   clearInterval(browserTimer)
 })
 
@@ -134,22 +165,8 @@ const rosGraph = computed(() => data.value?.ros_graph ?? { nodes: [], topics: []
 const software = computed(() => data.value?.software ?? {})
 
 // 网络分析：后端 stats + 浏览器 stats
-async function loadStats() {
-  try { systemStats.value = await api.systemStats() } catch (e) {}
-}
-function loadBrowser() {
-  const mem = performance.memory ? {
-    used: (performance.memory.usedJSHeapSize / 1048576).toFixed(1),
-    total: (performance.memory.totalJSHeapSize / 1048576).toFixed(1)
-  } : null
-  browserInfo.value = {
-    jsHeapMb: mem,
-    dom: document.querySelectorAll('*').length,
-    svg: document.querySelectorAll('svg').length,
-    wsEntries: store.entries.length,
-    wsBytes: wsBytes.value
-  }
-}
+;
+;
 
 // CPU 数字颜色：低/中/高三色
 function cpuColor(p) {
@@ -157,7 +174,7 @@ function cpuColor(p) {
   if (p < 30) return 'color: var(--green)'
   if (p < 70) return 'color: var(--yellow)'
   return 'color: var(--red)'
-}
+};
 </script>
 
 <template>
@@ -435,6 +452,62 @@ function cpuColor(p) {
           </div>
           <div v-if="systemStats?.psutil_missing" class="warn" style="margin-top:12px;font-size:12px">
             ⚠ psutil 未安装，部分指标不可用。运行: pip install psutil
+          </div>
+        </div>
+
+        <!-- 仓库同步信息（git 状态） -->
+        <div class="card glow" style="margin-top:24px">
+          <div class="flex" style="margin-bottom:14px">
+            <h3 style="margin:0">
+              <Icon name="cubeBox" size="md" class="card-h3-icon" />
+              仓库同步
+              <span v-if="gitInfo?.in_sync === true" class="tag green" style="margin-left:10px">✓ 同步</span>
+              <span v-else-if="gitInfo" class="tag" style="margin-left:10px;background:rgba(255,206,84,.15);color:var(--yellow)">⚠ 偏离</span>
+              <span v-else class="muted" style="font-weight:400;margin-left:10px;font-size:12px">加载中…</span>
+            </h3>
+            <div class="spacer"></div>
+            <span class="muted" style="font-size:11px;font-family:var(--font-mono)">每 30s 刷新</span>
+          </div>
+
+          <div v-if="gitInfo?.latest?.hash" class="metric-grid" style="gap:12px">
+            <div class="metric">
+              <div class="label">最新 commit</div>
+              <div class="val" style="font-size:18px;font-family:var(--font-mono);letter-spacing:0">
+                {{ gitInfo.latest.short }}
+              </div>
+              <div class="muted sub" style="margin-top:4px;font-size:11px;line-height:1.4;word-break:break-all">
+                {{ gitInfo.latest.subject }}
+              </div>
+            </div>
+            <div class="metric">
+              <div class="label">作者</div>
+              <div class="val" style="font-size:16px">{{ gitInfo.latest.author }}</div>
+              <div class="muted sub" style="margin-top:4px;font-size:11px">{{ gitInfo.latest.date }}</div>
+            </div>
+            <div class="metric">
+              <div class="label">分支 / 远程</div>
+              <div class="val" style="font-size:18px;font-family:var(--font-mono)">{{ gitInfo.branch }}</div>
+              <div class="muted sub" style="margin-top:4px;font-size:11px;line-height:1.4;word-break:break-all">
+                {{ gitInfo.remote }}
+              </div>
+            </div>
+            <div class="metric">
+              <div class="label">与 origin/main 关系</div>
+              <div class="val" style="font-size:18px">
+                <span v-if="gitInfo.in_sync" style="color:var(--green)">一致</span>
+                <span v-else style="color:var(--yellow)">
+                  <span v-if="gitInfo.behind > 0">落后 {{ gitInfo.behind }} 提交</span>
+                  <span v-else-if="gitInfo.ahead > 0">领先 {{ gitInfo.ahead }} 提交</span>
+                  <span v-else>分叉</span>
+                </span>
+              </div>
+              <div class="muted sub" style="margin-top:4px;font-size:11px">
+                未提交 {{ gitInfo.uncommitted }} 文件
+              </div>
+            </div>
+          </div>
+          <div v-else class="muted" style="font-size:12px;padding:8px 0">
+            {{ gitInfo ? '仓库信息加载失败' : '正在读取…' }}
           </div>
         </div>
       </template>

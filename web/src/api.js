@@ -27,6 +27,7 @@ export const api = {
   graph: () => getJson('/api/graph'),
   topology: () => getJson('/api/topology'),
   systemStats: () => getJson('/api/system/stats'),
+  gitInfo: () => getJson('/api/git/info'),
   imageTopics: () => getJson('/api/ros/image_topics'),
   taskLogs: (id, tail = 300, node, level) => {
     const q = new URLSearchParams({ tail: String(tail) })

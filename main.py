@@ -293,6 +293,62 @@ def api_topology():
     return system_monitor.ros_topology()
 
 
+def _git_info() -> dict:
+    """读取当前仓库 git 状态（仅读，绝不修改）。"""
+    import subprocess
+    from pathlib import Path
+    repo = Path(__file__).resolve().parent
+    def run(*args):
+        try:
+            r = subprocess.run(['git'] + list(args), cwd=repo, capture_output=True, text=True, timeout=5)
+            return r.stdout.strip() if r.returncode == 0 else None
+        except Exception:
+            return None
+    info = {
+        "ok": True, "repo": str(repo),
+        "remote": run('remote', 'get-url', 'origin'),
+        "branch": run('branch', '--show-current'),
+        "latest": {},
+        "uncommitted": 0, "ahead": 0, "behind": 0,
+        "in_sync": True,
+    }
+    # 最新 commit（让 git 输出 6 行，再用 NUL 分隔）
+    # 用 0x1f (unit separator) 兼容普通字符
+    SEP = chr(0x1f)
+    fmt = f'%H{SEP}%h{SEP}%an{SEP}%ae{SEP}%ad{SEP}%s'
+    raw = run('log', '-1', f'--pretty=format:{fmt}')
+    if raw:
+        parts = raw.split(SEP)
+        if len(parts) >= 6:
+            info["latest"] = {
+                "hash": parts[0], "short": parts[1],
+                "author": parts[2], "email": parts[3],
+                "date": parts[4], "subject": parts[5],
+            }
+    # 未提交修改文件数
+    porcelain = run('status', '--porcelain')
+    if porcelain is not None:
+        info["uncommitted"] = len([l for l in porcelain.splitlines() if l.strip()])
+    # local vs upstream ahead/behind（@u = upstream tracking）
+    rev = run('rev-list', '--left-right', '--count', 'HEAD...@{u}')
+    if rev:
+        try:
+            left, right = rev.split('\t')
+            info["behind"] = int(left.strip())
+            info["ahead"] = int(right.strip())
+        except Exception:
+            pass
+    # 是否同步
+    info["in_sync"] = (info["ahead"] == 0 and info["behind"] == 0 and info["uncommitted"] == 0)
+    return info
+
+
+@app.get("/api/git/info")
+def api_git_info():
+    """当前 git 仓库同步状态：远程/分支/最新 commit/未提交/落后数。"""
+    return _git_info()
+
+
 @app.get("/api/system/stats")
 def api_system_stats():
     """后端进程级运行时统计：CPU / 内存 / WS 客户端 / 启动时间。"""
