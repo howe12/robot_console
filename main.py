@@ -282,6 +282,23 @@ def api_workspace():
             **workspace_analysis.discover_workspace(CONFIG["workspace"])}
 
 
+@app.get("/api/adapter/config")
+def api_adapter_config(workspace: str = ""):
+    """通用 ROS2 机器人适配器：扫描任意工作空间，
+    返回机器人能力、相机话题、底盘话题、自动生成的 Tasks 清单。
+
+    不传 workspace 时使用 spark_tasks.yaml 里的默认。
+    适配任意机器人：前端不需要改，只要后端能返回通用格式。
+    """
+    ws = workspace or CONFIG["workspace"]
+    try:
+        import device_adapter
+        config = device_adapter.discover_config(ws)
+        return {"ok": True, **config}
+    except Exception as e:
+        return {"ok": False, "error": str(e), "workspace": ws}
+
+
 @app.get("/api/graph")
 def api_graph():
     return {"ok": True, **system_monitor.ros_graph()}
