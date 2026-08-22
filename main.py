@@ -299,6 +299,83 @@ def api_adapter_config(workspace: str = ""):
         return {"ok": False, "error": str(e), "workspace": ws}
 
 
+@app.get("/api/workspace/status")
+def api_workspace_status():
+    """检查 spark_tasks.yaml 的工作空间是否有效（用于 Dashboard 启动时的引导页判断）。"""
+    yaml_path = BASE / "spark_tasks.yaml"
+    if not yaml_path.exists():
+        return {"ok": False, "reason": "no_yaml", "yaml_path": str(yaml_path)}
+    try:
+        cfg = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        return {"ok": False, "reason": "yaml_error", "yaml_path": str(yaml_path), "error": str(e)}
+    if not isinstance(cfg, dict):
+        return {"ok": False, "reason": "invalid_yaml", "yaml_path": str(yaml_path)}
+    ws = cfg.get("workspace", "")
+    if not ws:
+        return {"ok": False, "reason": "no_workspace", "yaml_path": str(yaml_path)}
+    ws_path = Path(ws)
+    if not ws_path.exists():
+        return {"ok": False, "reason": "path_missing", "workspace": ws, "yaml_path": str(yaml_path)}
+    if not (ws_path / "install").is_dir():
+        return {"ok": False, "reason": "no_install_dir", "workspace": ws}
+    return {"ok": True, "workspace": ws, "yaml_path": str(yaml_path)}
+
+
+@app.get("/api/workspace/diff")
+def api_workspace_diff(workspace: str = ""):
+    """对比 spark_tasks.yaml vs adapter 扫描结果。
+
+    用户点"扫描"时调，看修改建议。
+    """
+    global CONFIG
+    yaml_path = BASE / "spark_tasks.yaml"
+    if not workspace and yaml_path.exists():
+        try:
+            cfg = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+            workspace = cfg.get("workspace", "") if isinstance(cfg, dict) else ""
+        except Exception:
+            workspace = ""
+    try:
+        import workspace_init
+        return workspace_init.compute_diff(yaml_path, workspace or "")
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.post("/api/workspace/apply")
+def api_workspace_apply(workspace: str, auto_backup: bool = True):
+    """应用 adapter 扫描结果到 spark_tasks.yaml（带自动备份）。
+
+    用户确认修改后调。不会自动 reload CONFIG（需要 GET /api/workspace/reload）。
+    """
+    if not workspace:
+        return {"ok": False, "error": "workspace 参数为空"}
+    yaml_path = BASE / "spark_tasks.yaml"
+    try:
+        import workspace_init
+        current_yaml = workspace_init.load_current_yaml(yaml_path)
+        result = workspace_init.apply_to_yaml(yaml_path, workspace, current_yaml, auto_backup)
+        return result
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.post("/api/workspace/reload")
+def api_workspace_reload():
+    """重新加载 spark_tasks.yaml → 重新初始化 LaunchManager。
+
+    让新工作空间立即生效（不需要重启后端）。
+    """
+    global CONFIG, manager
+    try:
+        CONFIG = yaml.safe_load((BASE / "spark_tasks.yaml").read_text(encoding="utf-8"))
+        manager = LaunchManager(workspace=CONFIG["workspace"])
+        return {"ok": True, "workspace": CONFIG.get("workspace", "")}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 @app.get("/api/graph")
 def api_graph():
     return {"ok": True, **system_monitor.ros_graph()}

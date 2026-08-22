@@ -10,6 +10,60 @@ const emit = defineEmits(['toggle-sidebar'])
 // 注入全局日志 store（从 App.vue provide('logStore')）
 const store = inject('logStore', { entries: [], perTask: {}, running: [] })
 
+// ====== 工作空间初始化（引导页）======
+const initStage = ref('normal')  // normal | select_workspace | review_diff
+const initError = ref('')
+const newWorkspace = ref('')
+const diffResult = ref(null)
+const scanning = ref(false)
+const applying = ref(false)
+const currentWorkspace = ref('')
+
+async function checkInit() {
+  try {
+    const r = await api.workspaceStatus()
+    if (r.ok) {
+      currentWorkspace.value = r.workspace
+      initStage.value = 'normal'
+    } else {
+      initError.value = r.reason
+      initStage.value = 'select_workspace'
+    }
+  } catch (e) {
+    initError.value = String(e)
+    initStage.value = 'select_workspace'
+  }
+}
+
+async function scanWorkspace() {
+  if (!newWorkspace.value.trim()) return
+  scanning.value = true
+  try {
+    diffResult.value = await api.workspaceDiff(newWorkspace.value.trim())
+    initStage.value = 'review_diff'
+  } catch (e) {
+    initError.value = String(e)
+  }
+  scanning.value = false
+}
+
+async function applyWorkspace() {
+  if (!newWorkspace.value.trim()) return
+  applying.value = true
+  try {
+    const r = await api.workspaceApply(newWorkspace.value.trim(), true)
+    if (r.ok) {
+      await api.workspaceReload()
+      location.reload()  // 强制刷新所有依赖 CONFIG 的组件
+    } else {
+      initError.value = r.error || '应用失败'
+    }
+  } catch (e) {
+    initError.value = String(e)
+  }
+  applying.value = false
+}
+
 const data = ref(null)
 const error = ref('')
 const lastFmt = ref('')
@@ -135,6 +189,7 @@ onMounted(() => {
     }
   })()
   ;(async () => { try { gitInfo.value = await api.gitInfo() } catch {} })()  // 初始拉一次
+  ;(async () => { try { await checkInit() } catch (e) { console.error('[checkInit]', e) } })()  // 检查工作空间，无效时进入引导页
   statsTimer = setInterval(async () => { try { systemStats.value = await api.systemStats() } catch {} }, isRemote ? 5000 : 2000)
   browserTimer = setInterval(() => {
     const mem = performance.memory ? {
@@ -268,6 +323,81 @@ const diskTooltip = computed(() => {
 
 <template>
   <div class="layout-with-sidebar" :class="{ collapsed: sidebarCollapsed }">
+
+    <!-- ===== 工作空间初始化覆盖层（initStage !== normal 时显示） ===== -->
+    <div v-if="initStage === 'select_workspace'" class="init-overlay">
+      <div class="card glow init-card">
+        <h2 style="margin-top:0">🚀 初始化 · 选择 ROS2 工作空间</h2>
+        <p class="muted">当前 <code>spark_tasks.yaml</code> 未配置有效工作空间。请选择要管理的 ROS2 工作空间路径（应包含 <code>install/</code> 目录）。</p>
+        <div v-if="initError" class="warn" style="margin:10px 0;padding:10px;background:rgba(255,80,80,.1);border-radius:6px">
+          <b>原因：</b>{{ initError }}
+        </div>
+        <label style="display:block;margin:20px 0 8px;font-size:12px;color:var(--muted)">工作空间路径</label>
+        <input v-model="newWorkspace" placeholder="/home/spark/Music/spark_humble" @keyup.enter="scanWorkspace" style="width:100%;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--font-mono);font-size:13px" />
+        <div style="display:flex;gap:10px;margin-top:16px">
+          <button class="btn primary" :disabled="!newWorkspace.trim() || scanning" @click="scanWorkspace">
+            {{ scanning ? '扫描中…' : '🔍 扫描工作空间' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-else-if="initStage === 'review_diff'" class="init-overlay">
+      <div class="card glow init-card init-card-wide">
+        <h2 style="margin-top:0">📋 修改建议</h2>
+        <p class="muted">目标工作空间: <code style="color:var(--accent)">{{ newWorkspace }}</code></p>
+        <p v-if="diffResult?.discovered?.robot" class="muted">
+          类型: <b style="color:var(--text)">{{ diffResult.discovered.robot.type }}</b> ·
+          能力: {{ diffResult.discovered.robot.capabilities?.join(' · ') || '—' }} ·
+          包: {{ diffResult.discovered.robot.packages?.length }} ·
+          launch: {{ diffResult.discovered.robot.launches?.length }}
+        </p>
+
+        <div class="diff-summary" style="display:flex;gap:10px;margin:16px 0">
+          <span class="tag green" style="font-size:14px;padding:6px 14px">+ {{ diffResult?.diff?.added?.length || 0 }} 新增</span>
+          <span class="tag red" style="font-size:14px;padding:6px 14px">− {{ diffResult?.diff?.removed?.length || 0 }} 删除</span>
+          <span class="tag" style="font-size:14px;padding:6px 14px">= {{ diffResult?.diff?.kept?.length || 0 }} 保留</span>
+        </div>
+
+        <div v-if="diffResult?.diff?.added?.length" style="margin:14px 0">
+          <h4 style="color:var(--green);margin:8px 0">🟢 将新增（adapter 自动发现）</h4>
+          <ul style="list-style:none;padding:0;margin:0;max-height:200px;overflow:auto">
+            <li v-for="(t, i) in diffResult.diff.added" :key="'a'+i" style="padding:6px 10px;border-left:3px solid var(--green);background:rgba(40,200,80,.05);margin-bottom:4px;font-size:12px">
+              <b>{{ t.name || t.launch }}</b>
+              <span class="muted" style="margin-left:8px">{{ t.package }} / {{ t.launch }}</span>
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="diffResult?.diff?.removed?.length" style="margin:14px 0">
+          <h4 style="color:var(--red);margin:8px 0">🔴 将删除（这些 launch 文件已不存在）</h4>
+          <ul style="list-style:none;padding:0;margin:0;max-height:200px;overflow:auto">
+            <li v-for="(t, i) in diffResult.diff.removed" :key="'r'+i" style="padding:6px 10px;border-left:3px solid var(--red);background:rgba(255,80,80,.05);margin-bottom:4px;font-size:12px;text-decoration:line-through">
+              <b>{{ t.name || t.launch }}</b>
+              <span class="muted" style="margin-left:8px">{{ t.package }} / {{ t.launch }}</span>
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="!diffResult?.diff?.added?.length && !diffResult?.diff?.removed?.length" style="padding:20px;text-align:center;background:rgba(40,200,80,.1);border-radius:8px;color:var(--green)">
+          ✅ 当前 yaml 与 adapter 扫描结果一致，无需修改。
+        </div>
+
+        <div v-if="diffResult?.yaml_error" style="margin:10px 0;padding:10px;background:rgba(255,206,84,.1);border-radius:6px">
+          <b>⚠ 当前 yaml 解析错误：</b>{{ diffResult.yaml_error }}<br>
+          <span class="muted">应用后会用扫描结果重写整个文件。</span>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+          <button class="btn primary" :disabled="applying" @click="applyWorkspace" style="flex:1">
+            {{ applying ? '应用中…' : '✅ 确认应用（自动备份原文件）' }}
+          </button>
+          <button class="btn" @click="initStage = 'select_workspace'">← 重新选择</button>
+          <button class="btn" @click="initStage = 'normal'">取消</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 粘性侧边栏：上下文信息 -->
     <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
       <div class="sidebar-header">

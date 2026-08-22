@@ -26,6 +26,12 @@ export const api = {
   workspace: () => getJson('/api/workspace'),
   adapterConfig: (workspace = '') =>
     getJson(`/api/adapter/config${workspace ? '?workspace=' + encodeURIComponent(workspace) : ''}`),
+  workspaceStatus: () => getJson('/api/workspace/status'),
+  workspaceDiff: (workspace = '') =>
+    getJson(`/api/workspace/diff${workspace ? '?workspace=' + encodeURIComponent(workspace) : ''}`),
+  workspaceApply: (workspace, autoBackup = true) =>
+    postJson('/api/workspace/apply?workspace=' + encodeURIComponent(workspace) + '&auto_backup=' + (autoBackup ? 'true' : 'false'), {}),
+  workspaceReload: () => postJson('/api/workspace/reload', {}),
   graph: () => getJson('/api/graph'),
   topology: () => getJson('/api/topology'),
   systemStats: () => getJson('/api/system/stats'),

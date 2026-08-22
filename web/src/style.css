@@ -510,6 +510,16 @@ a { color: var(--accent); text-decoration: none; }
 }
 .robot-meta .tag.mono { color: var(--accent); }
 
+/* 工作空间初始化覆盖层 */
+.init-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(8px);
+  padding: 20px; overflow: auto;
+}
+.init-card { width: 100%; max-width: 560px; max-height: calc(100vh - 40px); overflow: auto; }
+.init-card-wide { width: 100%; max-width: 880px; max-height: calc(100vh - 40px); overflow: auto; }
+
 /* 指标卡折叠面板（CPU/内存/磁盘详情） */
 .metric-detail {
   margin-top: 10px;
