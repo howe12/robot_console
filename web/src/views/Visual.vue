@@ -18,6 +18,7 @@ const camQuality = ref(80)                       // JPEG 质量
 const camFps = ref(15)                           // 帧率
 const camAspect = ref('16:10')                   // 比例: 4:3 / 16:9 / 16:10 / 1:1
 const availableTopics = ref([])                  // ROS 图中所有 Image 话题
+const adapterConfig = ref(null)                // adapter 通用配置（含机器人类型、能力、相机话题 default_for）
 const showCamSettings = ref(true)                // 设置面板默认展开（避免忘记点击）
 const velState = ref('v=0.0  w=0.0')
 const foxgloveOn = ref(false)
@@ -78,6 +79,21 @@ function onKeyUp(e) {
 }
 
 async function loadCamTopics() {
+  // 优先用 adapter（带 default_for 智能标识 color/depth/infra）
+  try {
+    const c = await api.adapterConfig()
+    if (c.ok) adapterConfig.value = c
+    if (c.ok && c.topics?.camera_topics?.length) {
+      availableTopics.value = c.topics.camera_topics
+      // 自动选 color 话题（如果当前没选或选了默认）
+      if (camTopic.value === 'camera/color/image_raw' || !camTopic.value) {
+        const colorTopic = c.topics.camera_topics.find(t => t.default_for === 'color')
+        if (colorTopic) camTopic.value = colorTopic.name
+      }
+      return
+    }
+  } catch (e) { /* fallback */ }
+  // fallback: 直接 /api/ros/image_topics
   try {
     const r = await api.imageTopics()
     availableTopics.value = r.topics || []
@@ -123,6 +139,8 @@ async function startBringup() {
 
 let statusTimer = null
 async function initAll() {
+  // 加载 adapter 配置（机器人类型 + 能力 + 相机话题）用于顶部 robot-meta
+  api.adapterConfig().then(c => { adapterConfig.value = c }).catch(() => {})
   await Promise.all([
     new Promise(r => { checkFoxglove(); r(); }),
     refreshDevices(),
@@ -210,6 +228,14 @@ onUnmounted(() => {
         </div>
         <div class="card glow" style="margin-top:16px"><div class="skeleton text" style="width:40%; height:14px; margin-bottom:12px"></div><div class="skeleton block" style="height:300px"></div></div>
       </template>
+
+      <!-- 机器人能力提示（adapter 通用） -->
+      <div v-if="adapterConfig?.robot" class="robot-meta">
+        <span class="tag">🤖 {{ adapterConfig.robot.type }}</span>
+        <span v-for="cap in adapterConfig.robot.capabilities || []" :key="cap" class="tag">{{ cap }}</span>
+        <span v-if="adapterConfig.topics?.cmd_vel_topic" class="tag mono">cmd_vel: {{ adapterConfig.topics.cmd_vel_topic }}</span>
+        <span class="muted" style="font-size:10px;margin-left:auto">由 adapter 自动推断</span>
+      </div>
 
       <!-- 实际内容 -->
       <template v-else>

@@ -24,6 +24,8 @@ export const api = {
   systemStatus: () => getJson('/api/system/status'),
   systemLight: () => getJson('/api/system/light'),
   workspace: () => getJson('/api/workspace'),
+  adapterConfig: (workspace = '') =>
+    getJson(`/api/adapter/config${workspace ? '?workspace=' + encodeURIComponent(workspace) : ''}`),
   graph: () => getJson('/api/graph'),
   topology: () => getJson('/api/topology'),
   systemStats: () => getJson('/api/system/stats'),

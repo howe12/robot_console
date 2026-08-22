@@ -17,7 +17,8 @@ const loading = ref(true)
 const selected = ref(null)
 const selectedWs = ref(null)
 const pn = ref(null)
-const view = ref('curated')  // curated | workspace
+const view = ref('curated')  // curated | workspace | discovered
+const adapterConfig = ref(null)
 const paramVals = reactive({})
 const wsParamVals = reactive({})
 
@@ -54,13 +55,28 @@ async function loadAll() {
   refreshRunning()
   loading.value = false
 }
+
+async function loadAdapter() {
+  try { adapterConfig.value = await api.adapterConfig() }
+  catch (e) { adapterConfig.value = null }
+}
+
+function launchDiscovered(t) {
+  // 调用现有 /api/tasks/custom 启动
+  api.startCustom(t.package, t.launch, t.params || {}).then(r => {
+    if (r.ok) store.activeTab = 'tasks'
+  })
+}
 function refreshRunning() {
   api.status().then(s => {
     running.splice(0, running.length, ...(s.running || []))
   }).catch(() => {})
 }
 
-onMounted(loadAll)
+onMounted(async () => {
+  await loadAll()
+  loadAdapter()
+})
 
 function defaultVals(task) {
   const o = {}
@@ -185,6 +201,7 @@ const otherRunningId = computed(() => {
         <div class="filter-chips" style="margin-bottom:14px">
           <button class="filter-chip" :class="{ active: view === 'curated' }" @click="view = 'curated'">精选 · {{ tasks.length }}</button>
           <button class="filter-chip" :class="{ active: view === 'workspace' }" @click="view = 'workspace'">工作空间</button>
+          <button class="filter-chip" :class="{ active: view === 'discovered' }" @click="view = 'discovered'">🤖 自动发现</button>
         </div>
 
         <!-- 精选任务列表 -->
@@ -202,6 +219,44 @@ const otherRunningId = computed(() => {
             <button class="btn sm ghost" title="查看 launch 文件"
               v-if="t.launch_file && t.enabled !== false"
               @click.stop="openLaunchSource(t.launch_pkg || t.package, t.launch_file)"><Icon name="file" size="sm" /></button>
+          </div>
+        </div>
+
+        <!-- 自动发现视图（adapter 扫描结果） -->
+        <div v-else-if="view === 'discovered'">
+          <div v-if="!adapterConfig" class="muted" style="font-size:11px;padding:8px 0">
+            点击"扫描工作空间"开始。
+          </div>
+          <div v-else>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
+              类型: <b style="color:var(--text)">{{ adapterConfig.robot?.type || '?' }}</b>
+              · 包: {{ adapterConfig.robot?.packages?.length || 0 }}
+              · launch: {{ adapterConfig.robot?.launches?.length || 0 }}
+              · 能力: {{ (adapterConfig.robot?.capabilities || []).join(' · ') || '—' }}
+            </div>
+            <button class="btn sm" style="width:100%;margin-top:6px" @click="loadAdapter">↻ 重新扫描</button>
+            <div v-if="(adapterConfig.tasks?.curated || []).length" style="margin-top:10px">
+              <div class="muted" style="font-size:10px;letter-spacing:0.06em;margin-bottom:6px">CURATED</div>
+              <div v-for="t in adapterConfig.tasks.curated" :key="`c-${t.package}-${t.launch}`"
+                   class="fn-item" :title="t.name" @click="launchDiscovered(t)">
+                <span class="fn-name">{{ t.name || t.launch }}</span>
+                <span class="tag">{{ t.menu }}</span>
+                <span class="muted" style="font-size:10px;margin-left:auto">{{ t.package }}</span>
+              </div>
+            </div>
+            <div v-if="(adapterConfig.tasks?.workspace_pinned || []).length" style="margin-top:8px">
+              <div class="muted" style="font-size:10px;letter-spacing:0.06em;margin-bottom:6px">WORKSPACE</div>
+              <div v-for="t in adapterConfig.tasks.workspace_pinned" :key="`p-${t.package}-${t.launch}`"
+                   class="fn-item" @click="launchDiscovered(t)">
+                <span class="fn-name">{{ t.launch }}</span>
+                <span class="tag">{{ t.menu }}</span>
+                <span class="muted" style="font-size:10px;margin-left:auto">{{ t.package }}</span>
+              </div>
+            </div>
+            <div v-if="!(adapterConfig.tasks?.curated?.length || 0) && !(adapterConfig.tasks?.workspace_pinned?.length || 0)"
+                 class="muted" style="font-size:11px;padding:8px 0">
+              未发现 launch 文件。
+            </div>
           </div>
         </div>
 

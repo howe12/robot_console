@@ -497,6 +497,19 @@ a { color: var(--accent); text-decoration: none; }
 }
 .commit-row:last-child { border-bottom: none; }
 .commit-row:hover { background: var(--bg3); }
+/* 机器人能力 chip 行（adapter 通用） */
+.robot-meta {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  padding: 8px 12px; margin-bottom: 12px;
+  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r-md);
+  font-size: 12px;
+}
+.robot-meta .tag {
+  padding: 2px 8px; font-size: 11px; letter-spacing: 0;
+  text-transform: none; font-family: var(--font-mono);
+}
+.robot-meta .tag.mono { color: var(--accent); }
+
 /* 指标卡折叠面板（CPU/内存/磁盘详情） */
 .metric-detail {
   margin-top: 10px;
