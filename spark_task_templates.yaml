@@ -1,0 +1,55 @@
+# spark_task_templates.yaml
+# 定义"功能类别"的算法选项 + 参数 schema
+# 与 spark_tasks.yaml 互补：
+#   - spark_tasks.yaml: 哪些 launch 可用（自动发现 + 精编）
+#   - spark_task_templates.yaml: 哪些 launch 需要算法选择 + 参数配置
+
+task_templates:
+  # ========== 2D 激光建图 ==========
+  slam_2d:
+    label: 2D 激光建图
+    description: 用 2D 激光雷达（LaserScan）建 2D 占用栅格地图，用于后续导航
+    required_topic: sensor_msgs/LaserScan
+    algorithms:
+      - id: gmapping
+        name: GMapping
+        description: 经典 2D 栅格建图算法，资源占用低，适合小环境（< 5000 m²）
+        launch: slam_gmapping.launch.py
+        package: slam_gmapping
+        params_schema:
+          - key: map_name
+            label: 地图名（保存目录）
+            type: string
+            default: my_map
+          - key: resolution
+            label: 分辨率 (m/cell)
+            type: number
+            default: 0.05
+            min: 0.01
+            max: 0.2
+            step: 0.01
+          - key: max_range
+            label: 最大激光距离 (m)
+            type: number
+            default: 30.0
+            min: 1.0
+            max: 100.0
+            step: 1.0
+      - id: cartographer
+        name: Cartographer
+        description: Google 开源 SLAM，特征丰富，支持 2D 和 3D 地图
+        launch: cartographer.launch.py
+        package: cartographer_ros
+        params_schema:
+          - key: config_basename
+            label: 配置文件名（不含.lua 后缀）
+            type: select
+            options: [cartographer, cartographer_2d, pure_localization]
+            default: cartographer
+          - key: resolution
+            label: 分辨率 (m/cell)
+            type: number
+            default: 0.05
+            min: 0.01
+            max: 0.2
+            step: 0.01

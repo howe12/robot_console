@@ -32,6 +32,9 @@ export const api = {
   workspaceApply: (workspace, autoBackup = true) =>
     postJson('/api/workspace/apply?workspace=' + encodeURIComponent(workspace) + '&auto_backup=' + (autoBackup ? 'true' : 'false'), {}),
   workspaceReload: () => postJson('/api/workspace/reload', {}),
+  taskTemplates: () => getJson('/api/task-templates'),
+  startTemplate: (template_id, algorithm_id, params = {}) =>
+    postJson('/api/tasks/template', { template_id, algorithm_id, params }),
   graph: () => getJson('/api/graph'),
   topology: () => getJson('/api/topology'),
   systemStats: () => getJson('/api/system/stats'),

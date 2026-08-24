@@ -66,6 +66,12 @@ class CustomStartBody(BaseModel):
     params: dict = {}
 
 
+class TemplateStartBody(BaseModel):
+    template_id: str
+    algorithm_id: str
+    params: dict = {}
+
+
 class CmdVelBody(BaseModel):
     linear: float = 0.0
     angular: float = 0.0
@@ -297,6 +303,67 @@ def api_adapter_config(workspace: str = ""):
         return {"ok": True, **config}
     except Exception as e:
         return {"ok": False, "error": str(e), "workspace": ws}
+
+
+@app.get("/api/task-templates")
+def api_task_templates():
+    """获取所有 task templates（算法选项 + 参数 schema）。
+
+    前端 Tasks.vue 用这个显示参数选择对话框。
+    文件不存在/损坏时返回空 templates（不报错）。
+    """
+    import yaml
+    templates_path = BASE / "spark_task_templates.yaml"
+    if not templates_path.exists():
+        return {"ok": True, "templates": {}, "exists": False, "yaml_path": str(templates_path)}
+    try:
+        data = yaml.safe_load(templates_path.read_text(encoding="utf-8"))
+        return {"ok": True, "templates": data.get("task_templates", {}), "exists": True, "yaml_path": str(templates_path)}
+    except Exception as e:
+        return {"ok": False, "error": str(e), "templates": {}, "yaml_path": str(templates_path)}
+
+
+@app.post("/api/tasks/template")
+def api_task_template_start(body: TemplateStartBody):
+    """根据 template + 算法 + 参数启动任务。
+
+    用户在 Tasks 页选算法、填完参数后调这个端点。
+    互斥：跟现有 task 互斥保护（同一时间只能跑一个）。
+    """
+    # 互斥
+    running = _running_task_id()
+    if running:
+        return {"ok": False, "error": "已有功能正在运行（%s），请先停止后再启动新功能" % running}
+
+    import yaml
+    templates_path = BASE / "spark_task_templates.yaml"
+    if not templates_path.exists():
+        return {"ok": False, "error": "spark_task_templates.yaml 不存在"}
+    try:
+        data = yaml.safe_load(templates_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        return {"ok": False, "error": f"yaml 解析失败: {e}"}
+    templates = data.get("task_templates", {})
+    if body.template_id not in templates:
+        return {"ok": False, "error": f"未知 template_id: {body.template_id}"}
+    template = templates[body.template_id]
+    algo = next((a for a in template["algorithms"] if a["id"] == body.algorithm_id), None)
+    if not algo:
+        return {"ok": False, "error": f"未知 algorithm_id: {body.algorithm_id}"}
+
+    # 构造 task：用 algo 指定的 package + launch + 用户参数
+    task = {
+        "id": f"{body.template_id}_{body.algorithm_id}",
+        "name": f"{template.get('label', body.template_id)} - {algo['name']}",
+        "kind": "launch",
+        "package": algo["package"],
+        "launch": algo["launch"],
+        "params": {k: {"default": v} for k, v in (body.params or {}).items()},
+        "template_id": body.template_id,
+        "algorithm_id": body.algorithm_id,
+    }
+    result = manager.start(task, CONFIG["device"].get("vars", {}), body.params or {})
+    return {"ok": result["ok"], **result}
 
 
 @app.get("/api/workspace/status")

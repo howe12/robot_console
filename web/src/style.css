@@ -518,7 +518,26 @@ a { color: var(--accent); text-decoration: none; }
   padding: 20px; overflow: auto;
 }
 .init-card { width: 100%; max-width: 560px; max-height: calc(100vh - 40px); overflow: auto; }
-.init-card-wide { width: 100%; max-width: 880px; max-height: calc(100vh - 40px); overflow: auto; }
+init-card-wide { width: 100%; max-width: 880px; max-height: calc(100vh - 40px); overflow: auto; }
+
+/* 算法选择 + 参数对话框 */
+.dialog-overlay {
+  position: fixed; inset: 0; z-index: 1100;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px);
+  padding: 20px;
+}
+.dialog {
+  background: var(--glass-bg); border: 1px solid var(--glass-border);
+  border-radius: var(--r-2xl); padding: 24px;
+  width: 100%; max-width: 560px; max-height: calc(100vh - 40px);
+  overflow: auto; backdrop-filter: blur(var(--glass-blur));
+}
+.param-label {
+  display: block; font-size: 11px; color: var(--muted);
+  letter-spacing: 0.04em; text-transform: uppercase;
+  margin-bottom: 4px; font-weight: 600;
+}
 
 /* 指标卡折叠面板（CPU/内存/磁盘详情） */
 .metric-detail {

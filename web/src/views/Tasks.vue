@@ -61,6 +61,92 @@ async function loadAdapter() {
   catch (e) { adapterConfig.value = null }
 }
 
+// ====== Task templates（算法选择 + 参数配置）======
+const taskTemplates = ref({})
+const showParamDialog = ref(false)
+const dialogTask = ref(null)
+const dialogTemplateId = ref(null)
+const dialogAlgoId = ref(null)
+const paramValues = ref({})
+
+async function loadTaskTemplates() {
+  try {
+    const r = await api.taskTemplates()
+    taskTemplates.value = r.templates || {}
+  } catch (e) {
+    taskTemplates.value = {}
+  }
+}
+
+function matchTemplateId(taskName) {
+  if (!taskName) return null
+  const lower = taskName.toLowerCase()
+  if (/slam|gmapping|cartographer|建图/.test(lower)) return 'slam_2d'
+  if (/navigat|amcl|nav2|导航/.test(lower)) return 'navigation_2d'
+  if (/detect|yolo|ssd|检测|识别/.test(lower)) return 'detection'
+  if (/follow|跟随/.test(lower)) return 'following'
+  return null
+}
+
+async function pickTaskWithParams(t) {
+  const tId = matchTemplateId(t.name)
+  if (!tId || !taskTemplates.value[tId]) {
+    return launchDiscovered(t)
+  }
+  dialogTask.value = t
+  dialogTemplateId.value = tId
+  const tpl = taskTemplates.value[tId]
+  const firstAlgo = tpl.algorithms[0]
+  dialogAlgoId.value = firstAlgo.id
+  paramValues.value = {}
+  for (const p of (firstAlgo.params_schema || [])) {
+    paramValues.value[p.key] = p.default
+  }
+  showParamDialog.value = true
+}
+
+const currentTemplate = computed(() => taskTemplates.value[dialogTemplateId.value] || null)
+const currentAlgo = computed(() => {
+  const tpl = currentTemplate.value
+  if (!tpl) return null
+  return tpl.algorithms.find(a => a.id === dialogAlgoId.value) || tpl.algorithms[0]
+})
+
+function onAlgoChange(e) {
+  dialogAlgoId.value = e.target.value
+  if (!currentAlgo.value) return
+  paramValues.value = {}
+  for (const p of (currentAlgo.value.params_schema || [])) {
+    paramValues.value[p.key] = p.default
+  }
+}
+
+async function confirmTemplateLaunch() {
+  if (!dialogTask.value || !dialogTemplateId.value || !dialogAlgoId.value) return
+  const typed = {}
+  for (const [k, v] of Object.entries(paramValues.value)) {
+    const schema = (currentAlgo.value?.params_schema || []).find(p => p.key === k)
+    if (schema?.type === 'number' && v !== '' && v !== null && v !== undefined) {
+      typed[k] = String(Number(v))
+    } else if (schema?.type === 'bool') {
+      typed[k] = v ? 'true' : 'false'
+    } else {
+      typed[k] = String(v ?? '')
+    }
+  }
+  try {
+    const r = await api.startTemplate(dialogTemplateId.value, dialogAlgoId.value, typed)
+    if (r.ok) {
+      showParamDialog.value = false
+      store.activeTab = 'tasks'
+    } else {
+      alert(r.error || '启动失败')
+    }
+  } catch (e) {
+    alert('启动异常: ' + e)
+  }
+}
+
 function launchDiscovered(t) {
   // 调用现有 /api/tasks/custom 启动
   api.startCustom(t.package, t.launch, t.params || {}).then(r => {
@@ -76,6 +162,7 @@ function refreshRunning() {
 onMounted(async () => {
   await loadAll()
   loadAdapter()
+  loadTaskTemplates()
 })
 
 function defaultVals(task) {
@@ -238,7 +325,7 @@ const otherRunningId = computed(() => {
             <div v-if="(adapterConfig.tasks?.curated || []).length" style="margin-top:10px">
               <div class="muted" style="font-size:10px;letter-spacing:0.06em;margin-bottom:6px">CURATED</div>
               <div v-for="t in adapterConfig.tasks.curated" :key="`c-${t.package}-${t.launch}`"
-                   class="fn-item" :title="t.name" @click="launchDiscovered(t)">
+                   class="fn-item" :title="t.name" @click="pickTaskWithParams(t)">
                 <span class="fn-name">{{ t.name || t.launch }}</span>
                 <span class="tag">{{ t.menu }}</span>
                 <span class="muted" style="font-size:10px;margin-left:auto">{{ t.package }}</span>
@@ -256,6 +343,46 @@ const otherRunningId = computed(() => {
             <div v-if="!(adapterConfig.tasks?.curated?.length || 0) && !(adapterConfig.tasks?.workspace_pinned?.length || 0)"
                  class="muted" style="font-size:11px;padding:8px 0">
               未发现 launch 文件。
+            </div>
+          </div>
+        </div>
+
+        <!-- 算法选择 + 参数配置对话框（cover entire sidebar content area） -->
+        <div v-if="showParamDialog" class="dialog-overlay" @click.self="showParamDialog = false">
+          <div class="dialog">
+            <div class="flex" style="margin-bottom:14px;align-items:center">
+              <h3 style="margin:0;font-size:16px">⚙️ 配置：{{ dialogTask?.name }}</h3>
+              <div class="spacer"></div>
+              <button class="btn sm" @click="showParamDialog = false">✕</button>
+            </div>
+            <p v-if="currentTemplate" class="muted" style="font-size:12px;margin:0 0 14px">{{ currentTemplate.description }}</p>
+
+            <label class="param-label">算法</label>
+            <select :value="dialogAlgoId" @change="onAlgoChange" style="width:100%;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;margin-bottom:6px">
+              <option v-for="a in currentTemplate?.algorithms || []" :key="a.id" :value="a.id">{{ a.name }}</option>
+            </select>
+            <p v-if="currentAlgo" class="muted" style="font-size:11px;margin:0 0 14px;line-height:1.5">{{ currentAlgo.description }}</p>
+
+            <div v-for="p in currentAlgo?.params_schema || []" :key="p.key" style="margin-bottom:14px">
+              <label class="param-label">{{ p.label }}</label>
+              <input v-if="p.type === 'string'" :value="paramValues[p.key] || ''" @input="(e) => paramValues[p.key] = e.target.value" style="width:100%;padding:7px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--font-mono);font-size:12px" />
+              <div v-else-if="p.type === 'number'" style="display:flex;align-items:center;gap:10px">
+                <input type="range" :min="p.min ?? 0" :max="p.max ?? 100" :step="p.step ?? 1" :value="Number(paramValues[p.key] ?? p.default)" @input="(e) => paramValues[p.key] = Number(e.target.value)" style="flex:1" />
+                <input type="number" :min="p.min" :max="p.max" :step="p.step ?? 1" :value="Number(paramValues[p.key] ?? p.default)" @input="(e) => paramValues[p.key] = Number(e.target.value)" style="width:90px;padding:6px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--font-mono);font-size:12px" />
+                <span class="muted" style="font-size:11px;min-width:70px">当前: {{ paramValues[p.key] }}</span>
+              </div>
+              <label v-else-if="p.type === 'bool'" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input type="checkbox" :checked="!!paramValues[p.key]" @change="(e) => paramValues[p.key] = e.target.checked" />
+                <span>启用</span>
+              </label>
+              <select v-else-if="p.type === 'select'" :value="paramValues[p.key] || p.default" @change="(e) => paramValues[p.key] = e.target.value" style="width:100%;padding:7px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">
+                <option v-for="opt in p.options || []" :key="opt" :value="opt">{{ opt }}</option>
+              </select>
+            </div>
+
+            <div style="display:flex;gap:10px;margin-top:20px;padding-top:14px;border-top:1px solid var(--border)">
+              <button class="btn primary" @click="confirmTemplateLaunch" style="flex:1">🚀 启动（用当前参数）</button>
+              <button class="btn" @click="showParamDialog = false">取消</button>
             </div>
           </div>
         </div>
