@@ -520,12 +520,14 @@ def _git_info() -> dict:
     if porcelain is not None:
         info["uncommitted"] = len([l for l in porcelain.splitlines() if l.strip()])
     # local vs upstream ahead/behind（@u = upstream tracking）
+    # `git rev-list --left-right --count HEAD...@{u}` -> 'LEFT<TAB>RIGHT',
+    # LEFT=仅 HEAD 有（ahead），RIGHT=仅 upstream 有（behind）。
     rev = run('rev-list', '--left-right', '--count', 'HEAD...@{u}')
     if rev:
         try:
             left, right = rev.split('\t')
-            info["behind"] = int(left.strip())
-            info["ahead"] = int(right.strip())
+            info["ahead"] = int(left.strip())
+            info["behind"] = int(right.strip())
         except Exception:
             pass
     # 最近 N 个 commits（默认 5）
