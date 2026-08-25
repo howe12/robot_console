@@ -233,10 +233,21 @@ def api_stop(task_id: str, request: Request):
 
 @app.post("/api/stop-all")
 def api_stop_all(request: Request):
-    """紧急停止：停掉所有运行中的任务 + kill 全部 ROS 节点。"""
+    """紧急停止：先发布零速度刹停，再停所有任务 + kill 全部 ROS 节点。
+
+    电机控制器会继续执行最后收到的 /cmd_vel，直到新指令到来或看门狗超时；
+    所以必须先发 Twist(0,0)，否则急停只是"杀进程"，车会滑行继续跑。
+    """
     import datetime
+    import time
     client = request.client.host if request.client else "?"
     print("[EMERGENCY-STOP] %s from %s" % (datetime.datetime.now().strftime("%H:%M:%S"), client))
+    # 1) 立即连续发布零速度（最快刹停，不等任务进程退出）
+    for _ in range(4):
+        if not bridge.publish(0.0, 0.0):
+            break  # ROS 不可用/发布器未就绪，刹车也发不出去，直接进入停任务流程
+        time.sleep(0.05)
+    # 2) 停止所有运行中的任务
     stopped = []
     for r in manager.status():
         if r.get("running"):

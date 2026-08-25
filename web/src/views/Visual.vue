@@ -36,6 +36,12 @@ const presets = [
 const presetActive = ref(1)
 
 const keys = { w: false, a: false, s: false, d: false }
+const held = () => keys.w || keys.a || keys.s || keys.d
+function desiredVel() {
+  const fwd = (keys.w ? 1 : 0) - (keys.s ? 1 : 0)
+  const turn = (keys.d ? 1 : 0) - (keys.a ? 1 : 0)
+  return { lin: fwd * speedLimit.value, ang: turn * turnLimit.value }
+}
 function sendCmd(lin, ang) {
   api.cmdVel(lin, ang)
     .then(() => { velErr.value = '' })
@@ -44,38 +50,44 @@ function sendCmd(lin, ang) {
       setTimeout(() => { if (velErr.value.includes('控制指令发送失败')) velErr.value = '' }, 5000)
     })
 }
-function sendVel() {
-  let fwd = (keys.w ? 1 : 0) - (keys.s ? 1 : 0)
-  let turn = (keys.d ? 1 : 0) - (keys.a ? 1 : 0)
-  const lin = fwd * speedLimit.value
-  const ang = turn * turnLimit.value
+// 连续遥操作循环：按住期间每周期发布期望速度（喂饱驱动看门狗 → 低延迟平滑运动），
+// 松开时 release() 立即发布新状态（→0）刹停；循环本身只在该发时才发。
+const CTRL_HZ = 12
+let ctrlTimer = null
+function ctrlTick() {
+  if (!held()) return
+  const { lin, ang } = desiredVel()
   sendCmd(lin, ang)
+  updateVelText()
 }
 function drive(dir) {
   if (dir === ' ') { keys.w = keys.a = keys.s = keys.d = false }
   else if (['w','a','s','d'].includes(dir)) { keys[dir] = true }
-  sendVel(); updateVelText()
+  const { lin, ang } = desiredVel()
+  sendCmd(lin, ang); updateVelText()
 }
 function release(dir) {
   if (['w','a','s','d'].includes(dir)) { keys[dir] = false }
-  sendVel(); updateVelText()
+  const { lin, ang } = desiredVel()
+  sendCmd(lin, ang); updateVelText()
 }
 function stopAll() {
   keys.w = keys.a = keys.s = keys.d = false
   sendCmd(0, 0)
   updateVelText()
 }
+// 失焦保护：切走窗口/按 Alt-Tab 时立即归零，防止按住的方向键继续驱动
+function onWindowBlur() { stopAll() }
 function updateVelText() {
-  const lin = ((keys.w ? 1 : 0) - (keys.s ? 1 : 0)) * speedLimit.value
-  const ang = ((keys.d ? 1 : 0) - (keys.a ? 1 : 0)) * turnLimit.value
+  const { lin, ang } = desiredVel()
   velState.value = `v=${lin.toFixed(2)}  w=${ang.toFixed(2)}`
 }
 function setPreset(i) {
   presetActive.value = i
   speedLimit.value = presets[i].lin
   turnLimit.value = presets[i].ang
-  sendVel()
-  updateVelText()
+  const { lin, ang } = desiredVel()
+  sendCmd(lin, ang); updateVelText()
 }
 
 function onKeyDown(e) {
@@ -159,7 +171,9 @@ onMounted(() => {
   loadCamTopics()
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
+  window.addEventListener('blur', onWindowBlur)
   checkFoxglove()
+  ctrlTimer = setInterval(ctrlTick, 1000 / CTRL_HZ)
   // 轮询频率：默认 4s，VNC/远程环境自动 12s（相机状态不需要那么频繁刷新）
   const pollMs = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 12000 : 4000
   statusTimer = setInterval(() => { checkFoxglove(); refreshDevices() }, pollMs)
@@ -167,6 +181,8 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('keyup', onKeyUp)
+  window.removeEventListener('blur', onWindowBlur)
+  if (ctrlTimer) clearInterval(ctrlTimer)
   if (statusTimer) clearInterval(statusTimer)
 })
 </script>
