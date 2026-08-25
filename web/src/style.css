@@ -1113,6 +1113,7 @@ th {
 .empty { padding: 48px; text-align: center; color: var(--muted); }
 .warn { color: var(--yellow); }
 .muted { color: var(--muted); }
+.hidden { display: none !important; }
 .flex { display: flex; gap: 10px; align-items: center; }
 .spacer { flex: 1; }
 
