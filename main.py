@@ -633,7 +633,7 @@ def api_ros_image_topics():
 def api_cmd_vel(body: CmdVelBody):
     if not bridge.ensure_started():
         raise HTTPException(503, "ROS2 不可用（请确认后端由 run.sh 启动）")
-    bridge.publish_twist(body.linear, body.angular)
+    bridge.publish(body.linear, body.angular)
     return {"ok": True, "linear": body.linear, "angular": body.angular}
 
 

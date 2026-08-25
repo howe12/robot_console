@@ -21,6 +21,7 @@ const availableTopics = ref([])                  // ROS 图中所有 Image 话�
 const adapterConfig = ref(null)                // adapter 通用配置（含机器人类型、能力、相机话题 default_for）
 const showCamSettings = ref(true)                // 设置面板默认展开（避免忘记点击）
 const velState = ref('v=0.0  w=0.0')
+const velErr = ref('')                            // 控制指令发送失败提示（不再静默吞错）
 const foxgloveOn = ref(false)
 const foxgloveTip = ref('')
 const speedLimit = ref(0.25)
@@ -35,12 +36,20 @@ const presets = [
 const presetActive = ref(1)
 
 const keys = { w: false, a: false, s: false, d: false }
+function sendCmd(lin, ang) {
+  api.cmdVel(lin, ang)
+    .then(() => { velErr.value = '' })
+    .catch(e => {
+      velErr.value = '控制指令发送失败：' + (e.message || e)
+      setTimeout(() => { if (velErr.value.includes('控制指令发送失败')) velErr.value = '' }, 5000)
+    })
+}
 function sendVel() {
   let fwd = (keys.w ? 1 : 0) - (keys.s ? 1 : 0)
   let turn = (keys.d ? 1 : 0) - (keys.a ? 1 : 0)
   const lin = fwd * speedLimit.value
   const ang = turn * turnLimit.value
-  api.cmdVel(lin, ang).catch(() => {})
+  sendCmd(lin, ang)
 }
 function drive(dir) {
   if (dir === ' ') { keys.w = keys.a = keys.s = keys.d = false }
@@ -53,7 +62,7 @@ function release(dir) {
 }
 function stopAll() {
   keys.w = keys.a = keys.s = keys.d = false
-  api.cmdVel(0, 0).catch(() => {})
+  sendCmd(0, 0)
   updateVelText()
 }
 function updateVelText() {
@@ -299,6 +308,7 @@ onUnmounted(() => {
           <h3><Icon name="speed" size="md" class="card-h3-icon" /> 速度控制
             <span class="muted" style="font-weight:400;margin-left:8px;font-family:var(--font-mono)">{{ velState }}</span>
           </h3>
+          <div v-if="velErr" class="warn" style="font-size:12px;margin:-4px 0 10px">{{ velErr }}</div>
 
           <div style="margin-bottom:14px">
             <div class="muted" style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:8px">速度预设</div>
