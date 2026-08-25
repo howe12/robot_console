@@ -25,3 +25,6 @@ web/dist/
 # 环境变量 / 本地配置
 .env
 .env.localdocs/
+
+# 前端错误上报日志
+client_errors.log
