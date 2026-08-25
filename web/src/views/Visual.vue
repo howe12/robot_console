@@ -39,7 +39,8 @@ const keys = { w: false, a: false, s: false, d: false }
 const held = () => keys.w || keys.a || keys.s || keys.d
 function desiredVel() {
   const fwd = (keys.w ? 1 : 0) - (keys.s ? 1 : 0)
-  const turn = (keys.d ? 1 : 0) - (keys.a ? 1 : 0)
+  // 驱动约定: 正角速度=左转（spark_base 轮速公式 ang>0 时右轮快→左转）
+  const turn = (keys.a ? 1 : 0) - (keys.d ? 1 : 0)
   return { lin: fwd * speedLimit.value, ang: turn * turnLimit.value }
 }
 function sendCmd(lin, ang) {
