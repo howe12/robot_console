@@ -77,6 +77,24 @@ class CmdVelBody(BaseModel):
     angular: float = 0.0
 
 
+class ClientErrorBody(BaseModel):
+    message: str = ""
+    url: str = ""
+    at: str = ""
+    ua: str = ""
+
+
+@app.post("/api/client-error")
+def api_client_error(body: ClientErrorBody):
+    """前端把未捕获错误上报到这里，便于排查"页面静默变空"类问题。"""
+    try:
+        with open(BASE / "client_errors.log", "a", encoding="utf-8") as f:
+            f.write(f"[{body.at}] {body.url} | {body.ua}\n    {body.message}\n")
+    except Exception:
+        pass
+    return {"ok": True}
+
+
 def _expand_task_defaults(task: dict, devices: dict) -> dict:
     """把参数默认值里的 $VAR 占位符展开为设备检测结果。"""
     vars_map = devices.get("vars", {})

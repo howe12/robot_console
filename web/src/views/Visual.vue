@@ -244,7 +244,7 @@ onUnmounted(() => {
             <label>话题
               <select v-model="camTopic" @change="startCam()">
                 <option v-for="t in availableTopics" :key="t.name" :value="t.name">
-                  {{ t.name }} <span class="muted">({{ t.types[0]?.split('/').pop() }})</span>
+                  {{ t.name }} <span class="muted">({{ (t.types?.[0] || t.type || '—').split('/').pop() }})</span>
                 </option>
               </select>
             </label>
