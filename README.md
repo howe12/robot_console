@@ -78,6 +78,8 @@ spark_console/
 
 ## 🚀 安装与运行
 
+> 📄 **完整的新设备部署流程见 [`DEPLOY.md`](DEPLOY.md)**（含系统准备、路径对齐、SSH/代理、systemd、公网加固）。
+
 ### 环境要求
 - **操作系统**：Ubuntu 22.04+（其他发行版需自行调整设备检测路径）
 - **ROS2**：Humble（Desktop-Full Install）
