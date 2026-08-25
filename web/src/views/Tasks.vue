@@ -10,17 +10,12 @@ const emit = defineEmits(['toggle-sidebar'])
 
 const store = inject('logStore')
 const tasks = ref([])
-const workspace = ref(null)
 const running = reactive([])
 const msg = ref('')
 const loading = ref(true)
 const selected = ref(null)
-const selectedWs = ref(null)
-const pn = ref(null)
-const view = ref('curated')  // curated | workspace | discovered
-const adapterConfig = ref(null)
+const view = ref('curated')
 const paramVals = reactive({})
-const wsParamVals = reactive({})
 
 // launch 源码弹窗
 const modal = ref(null)
@@ -48,17 +43,8 @@ async function loadAll() {
     const first = t.tasks.find(x => x.enabled !== false)
     if (first && !selected.value) pickTask(first)
   } catch (e) { msg.value = '拉取任务失败: ' + e }
-  try {
-    const w = await api.workspace()
-    workspace.value = w
-  } catch (e) {}
   refreshRunning()
   loading.value = false
-}
-
-async function loadAdapter() {
-  try { adapterConfig.value = await api.adapterConfig() }
-  catch (e) { adapterConfig.value = null }
 }
 
 // ====== Task templates（算法选择 + 参数配置）======
@@ -161,7 +147,6 @@ function refreshRunning() {
 
 onMounted(async () => {
   await loadAll()
-  loadAdapter()
   loadTaskTemplates()
 })
 
@@ -181,17 +166,16 @@ function disabledReason(t) {
   // 2. 降级到「根据描述：xxx」
   return `根据描述：${desc.slice(0, 60)}`
 }
+function onPickCurated(t) {
+  // 命中 task template(建图/导航/检测/跟随) → 弹算法选择 + 参数对话框；否则进常规详情
+  const tId = matchTemplateId(t.name)
+  if (tId && taskTemplates.value[tId]) return pickTaskWithParams(t)
+  return pickTask(t)
+}
 function pickTask(t) {
   selected.value = t
-  selectedWs.value = null
   Object.keys(paramVals).forEach(k => delete paramVals[k])
   Object.assign(paramVals, defaultVals(t))
-}
-function pickWs(pkg, launch) {
-  selectedWs.value = { package: pkg, launch, args: launch.args }
-  selected.value = null
-  Object.keys(wsParamVals).forEach(k => delete wsParamVals[k])
-  for (const [k, m] of Object.entries(launch.args || {})) wsParamVals[k] = m.default ?? (m.has_default !== false ? (m.default ?? '') : '')
 }
 
 async function doStart(curated) {
@@ -200,22 +184,6 @@ async function doStart(curated) {
     const r = await api.startTask(t.id, paramVals)
     msg.value = r.ok ? `已启动 ${t.name}` : r.error || '启动失败'
     if (!r.ok) setTimeout(() => msg.value = '', 4000)
-    refreshRunning()
-  } catch (e) { msg.value = '启动异常: ' + e }
-}
-async function doStartWs() {
-  const w = selectedWs.value
-  if (!w) return
-  try {
-    const params = {}
-    for (const [k, v] of Object.entries(wsParamVals)) {
-      if (v !== '' && v !== null && v !== undefined) {
-        const meta = w.args[k] || {}
-        params[k] = meta.type === 'bool' ? String(v) : meta.type === 'int' ? Number(v) : String(v)
-      }
-    }
-    const r = await api.startCustom(w.package, w.launch.name, params)
-    msg.value = r.ok ? `已启动 ${w.package}/${w.launch.name}` : r.error || '启动失败'
     refreshRunning()
   } catch (e) { msg.value = '启动异常: ' + e }
 }
@@ -239,12 +207,6 @@ function launchCmd(launchFile, paramsObj) {
 }
 function currentLaunchCmd() {
   if (selected.value) return selected.value.launch_cmd || ''
-  if (selectedWs.value) {
-    const w = selectedWs.value
-    const params = {}
-    for (const [k, v] of Object.entries(wsParamVals)) { if (v !== '') params[k] = v }
-    return launchCmd({ pkg: w.package, file: w.launch.name }, params)
-  }
   return ''
 }
 async function copyCmd(cmd) {
@@ -261,7 +223,6 @@ const hasOtherRunning = computed(() => {
   const active = runningActive.value
   if (!active.length) return false
   if (selected.value && active.some(r => r.id === selected.value.id)) return false
-  if (selectedWs.value && active.some(r => r.id.includes(selectedWs.value.package))) return false
   return true
 })
 const otherRunningId = computed(() => {
@@ -287,63 +248,23 @@ const otherRunningId = computed(() => {
         <!-- 视图切换 -->
         <div class="filter-chips" style="margin-bottom:14px">
           <button class="filter-chip" :class="{ active: view === 'curated' }" @click="view = 'curated'">精选 · {{ tasks.length }}</button>
-          <button class="filter-chip" :class="{ active: view === 'workspace' }" @click="view = 'workspace'">工作空间</button>
-          <button class="filter-chip" :class="{ active: view === 'discovered' }" @click="view = 'discovered'">🤖 自动发现</button>
         </div>
 
         <!-- 精选任务列表 -->
         <div v-if="view === 'curated'">
           <div v-for="t in tasks" :key="t.id"
             class="fn-item" :class="{
-              active: selected?.id === t.id && !selectedWs,
+              active: selected?.id === t.id,
               disabled: t.enabled === false
             }"
             :title="t.enabled === false ? '⚠ 禁用：' + disabledReason(t) : t.desc"
-            @click="t.enabled !== false && pickTask(t)">
+            @click="t.enabled !== false && onPickCurated(t)">
             <span v-if="t.enabled === false" class="tag red" title="已禁用">禁用</span>
             <span class="fn-name" :title="t.name">{{ t.name }}</span>
             <span class="tag">{{ t.menu ?? '—' }}</span>
             <button class="btn sm ghost" title="查看 launch 文件"
               v-if="t.launch_file && t.enabled !== false"
               @click.stop="openLaunchSource(t.launch_pkg || t.package, t.launch_file)"><Icon name="file" size="sm" /></button>
-          </div>
-        </div>
-
-        <!-- 自动发现视图（adapter 扫描结果） -->
-        <div v-else-if="view === 'discovered'">
-          <div v-if="!adapterConfig" class="muted" style="font-size:11px;padding:8px 0">
-            点击"扫描工作空间"开始。
-          </div>
-          <div v-else>
-            <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
-              类型: <b style="color:var(--text)">{{ adapterConfig.robot?.type || '?' }}</b>
-              · 包: {{ adapterConfig.robot?.packages?.length || 0 }}
-              · launch: {{ adapterConfig.robot?.launches?.length || 0 }}
-              · 能力: {{ (adapterConfig.robot?.capabilities || []).join(' · ') || '—' }}
-            </div>
-            <button class="btn sm" style="width:100%;margin-top:6px" @click="loadAdapter">↻ 重新扫描</button>
-            <div v-if="(adapterConfig.tasks?.curated || []).length" style="margin-top:10px">
-              <div class="muted" style="font-size:10px;letter-spacing:0.06em;margin-bottom:6px">CURATED</div>
-              <div v-for="t in adapterConfig.tasks.curated" :key="`c-${t.package}-${t.launch}`"
-                   class="fn-item" :title="t.name" @click="pickTaskWithParams(t)">
-                <span class="fn-name">{{ t.name || t.launch }}</span>
-                <span class="tag">{{ t.menu }}</span>
-                <span class="muted" style="font-size:10px;margin-left:auto">{{ t.package }}</span>
-              </div>
-            </div>
-            <div v-if="(adapterConfig.tasks?.workspace_pinned || []).length" style="margin-top:8px">
-              <div class="muted" style="font-size:10px;letter-spacing:0.06em;margin-bottom:6px">WORKSPACE</div>
-              <div v-for="t in adapterConfig.tasks.workspace_pinned" :key="`p-${t.package}-${t.launch}`"
-                   class="fn-item" @click="launchDiscovered(t)">
-                <span class="fn-name">{{ t.launch }}</span>
-                <span class="tag">{{ t.menu }}</span>
-                <span class="muted" style="font-size:10px;margin-left:auto">{{ t.package }}</span>
-              </div>
-            </div>
-            <div v-if="!(adapterConfig.tasks?.curated?.length || 0) && !(adapterConfig.tasks?.workspace_pinned?.length || 0)"
-                 class="muted" style="font-size:11px;padding:8px 0">
-              未发现 launch 文件。
-            </div>
           </div>
         </div>
 
@@ -387,23 +308,7 @@ const otherRunningId = computed(() => {
           </div>
         </div>
 
-        <!-- 工作空间分析 -->
-        <div v-else>
-          <div v-for="p in workspace?.launches || []" :key="p.package" style="margin-bottom:8px">
-            <div class="flex" style="cursor:pointer;font-size:12px" @click="pn = (pn === p.package ? null : p.package)">
-              <span class="tag green">{{ p.package }}</span>
-              <span class="muted" style="font-size:11px">{{ p.launch.length }}</span>
-            </div>
-            <div v-if="pn === p.package" style="padding-left:8px;margin-top:4px;display:flex;flex-direction:column;gap:3px">
-              <div v-for="l in p.launch" :key="l.name" class="ws-item"
-                :class="{ active: selectedWs?.launch.name === l.name && selectedWs?.package === p.package }">
-                <button class="btn sm" style="flex:1;text-align:left;font-size:11px" @click="pickWs(p.package, l)">• {{ l.name }}</button>
-                <button class="btn sm ghost" title="查看 launch 文件" @click="openLaunchSource(p.package, l.name)"><Icon name="file" size="sm" /></button>
-              </div>
-            </div>
-          </div>
         </div>
-      </div>
     </aside>
 
     <!-- 主内容区 -->
@@ -453,7 +358,7 @@ const otherRunningId = computed(() => {
 
       <!-- 主内容：选中时显示详情，否则显示 Hero + 提示 -->
       <template v-else>
-      <div v-if="!selected && !selectedWs" class="empty">
+      <div v-if="!selected" class="empty">
         <div style="font-size:48px;opacity:.3"><Icon name="tasks" size="xl" /></div>
         <div style="margin-top:12px">从左侧选择一个功能查看详情</div>
       </div>
@@ -499,39 +404,6 @@ const otherRunningId = computed(() => {
               <input type="text" v-model="paramVals[k]" :placeholder="meta.default">
             </div>
             <div v-if="!selected.params || !Object.keys(selected.params).length" class="muted" style="font-size:12px">无可调参数</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 工作空间 launch 详情 -->
-      <div v-if="selectedWs" class="card glow">
-        <div class="flex" style="margin-bottom:14px">
-          <h3 style="margin:0"><Icon name="play" size="md" class="card-h3-icon" /> {{ selectedWs.package }} / {{ selectedWs.launch.name }}</h3>
-          <div class="spacer"></div>
-          <button class="btn sm primary" :disabled="hasOtherRunning" @click="doStartWs"><Icon name="rocket" size="sm" /> 启动</button>
-        </div>
-        <p v-if="hasOtherRunning" class="warn" style="font-size:12px;margin:0 0 12px">
-          ⚠️ 「{{ otherRunningId }}」正在运行，请先停止后再启动新功能
-        </p>
-
-        <div class="grid grid-2" style="gap:14px">
-          <div class="launch-way">
-            <div class="flex" style="margin-bottom:8px">
-              <span class="muted" style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase">🔧 启动方式</span>
-              <div class="spacer"></div>
-              <button class="btn sm ghost" @click="copyCmd(currentLaunchCmd())"><Icon name="copy" size="sm" /> 复制命令</button>
-            </div>
-            <code class="cmd">{{ currentLaunchCmd() }}</code>
-            <div style="margin-top:8px">
-              <button class="btn sm" @click="openLaunchSource(selectedWs.package, selectedWs.launch.name)"><Icon name="file" size="sm" /> 查看 launch 源码</button>
-            </div>
-          </div>
-          <div>
-            <div v-if="Object.keys(selectedWs.args).length" v-for="(meta, k) in selectedWs.args" :key="k" class="param-row">
-              <label :title="meta.desc">{{ k }}</label>
-              <input type="text" v-model="wsParamVals[k]" placeholder="默认: {{ meta.default }}">
-            </div>
-            <div v-else class="muted" style="font-size:12px">未检测到可调参数</div>
           </div>
         </div>
       </div>
