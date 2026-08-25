@@ -53,3 +53,138 @@ task_templates:
             min: 0.01
             max: 0.2
             step: 0.01
+
+  # ========== 2D 激光导航 ==========
+  navigation_2d:
+    label: 2D 激光导航
+    description: 在 RViz 中 2D Pose Estimate 定位 → 2D Nav Goal 导航；可选 Nav2 实时建图或 RTAB-Map 3D 定位
+    required_topic: sensor_msgs/LaserScan
+    algorithms:
+      - id: nav2_slam
+        name: Nav2 实时建图导航
+        description: slam_toolbox 实时建图 + Nav2 一体（start_spark_navigation2），无需预先建图，适合首次探索
+        launch: start_spark_navigation2.launch.py
+        package: spark_navigation2
+        params_schema:
+          - key: camera_type_tel
+            label: 相机类型
+            type: select
+            options: [d435, astra_pro]
+            default: d435
+          - key: lidar_type_tel
+            label: 雷达类型
+            type: select
+            options: [ydlidar_g2, ydlidar_g6]
+            default: ydlidar_g6
+          - key: namespace
+            label: 命名空间（多机器人，留空单机）
+            type: string
+            default: ""
+          - key: start_bringup_rviz
+            label: 启动 RViz 可视化
+            type: select
+            options: ['true', 'false']
+            default: 'false'
+      - id: rtabmap_3d
+        name: RTAB-Map 3D 深度导航
+        description: 深度相机 RTAB-Map 定位导航（start_rtabmap_rgbd_sync）；已建图后请选「定位模式=true」回到地图
+        launch: start_rtabmap_rgbd_sync.launch.py
+        package: spark_rtab_map
+        params_schema:
+          - key: camera_type_tel
+            label: 相机类型
+            type: select
+            options: [d435, astra_pro]
+            default: d435
+          - key: lidar_type_tel
+            label: 雷达类型
+            type: select
+            options: [ydlidar_g2, ydlidar_g6]
+            default: ydlidar_g6
+          - key: localization
+            label: 定位模式（true=用已存地图定位）
+            type: select
+            options: ['false', 'true']
+            default: 'false'
+          - key: namespace
+            label: 命名空间（多机器人，留空单机）
+            type: string
+            default: ""
+
+  # ========== 深度学习检测 ==========
+  detection:
+    label: 深度学习检测
+    description: 相机画面实时目标检测 / 人体姿态识别（YOLOv8）
+    algorithms:
+      - id: yolov8_obj
+        name: YOLOv8 物品识别
+        description: 对相机画面做目标检测，标注物品类别与置信度
+        launch: spark_yolo_object.launch.py
+        package: spark_yolov8
+        params_schema:
+          - key: camera_type_tel
+            label: 相机类型
+            type: select
+            options: [d435, astra_pro]
+            default: d435
+          - key: lidar_type_tel
+            label: 雷达类型
+            type: select
+            options: [ydlidar_g2, ydlidar_g6]
+            default: ydlidar_g6
+          - key: namespace
+            label: 命名空间（多机器人，留空单机）
+            type: string
+            default: ""
+      - id: yolov8_pose
+        name: YOLOv8 肢体识别
+        description: 对相机画面做人体姿态关键点识别
+        launch: spark_yolo_pose.launch.py
+        package: spark_yolov8
+        params_schema:
+          - key: camera_type_tel
+            label: 相机类型
+            type: select
+            options: [d435, astra_pro]
+            default: d435
+          - key: lidar_type_tel
+            label: 雷达类型
+            type: select
+            options: [ydlidar_g2, ydlidar_g6]
+            default: ydlidar_g6
+          - key: namespace
+            label: 命名空间（多机器人，留空单机）
+            type: string
+            default: ""
+
+  # ========== 激光跟随 ==========
+  following:
+    label: 激光跟随
+    description: 用激光雷达锁定前方目标并跟随移动
+    required_topic: sensor_msgs/LaserScan
+    algorithms:
+      - id: laser_follower
+        name: 激光跟随
+        description: 根据激光点云识别前方最近目标，保持距离跟随（spark_follower）
+        launch: spark_follower.launch.py
+        package: spark_follower
+        params_schema:
+          - key: camera_type_tel
+            label: 相机类型
+            type: select
+            options: [d435, astra_pro]
+            default: d435
+          - key: lidar_type_tel
+            label: 雷达类型
+            type: select
+            options: [ydlidar_g2, ydlidar_g6]
+            default: ydlidar_g6
+          - key: namespace
+            label: 命名空间（多机器人，留空单机）
+            type: string
+            default: ""
+          - key: start_bringup_rviz
+            label: 启动 RViz 可视化
+            type: select
+            options: ['true', 'false']
+            default: 'false'
