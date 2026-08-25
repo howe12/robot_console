@@ -152,7 +152,7 @@ watch(view, () => viewKey.value++)
           <div class="brand-title">SPARK</div>
           <div class="brand-sub">Robot Console</div>
         </div>
-        <span class="version-pill">v0.6</span>
+        <span class="version-pill">v1.0</span>
       </div>
       <div class="cmd-center">
         <span class="status-chip">

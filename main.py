@@ -42,7 +42,7 @@ BASE = Path(__file__).resolve().parent
 CONFIG = yaml.safe_load((BASE / "spark_tasks.yaml").read_text())
 STATIC = BASE / "static"
 
-app = FastAPI(title="Spark Console", version="0.6.0")
+app = FastAPI(title="Spark Console", version="1.0.0")
 
 # 活跃 WebSocket 客户端集合（用于 /api/system/stats 显示连接数）
 _ws_clients: set = set()
